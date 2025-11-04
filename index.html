@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Darts 501 Voice Prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Darts 501 Voice Prototype</h1>
+      <p class="tagline">Sprich deine Würfe – die App protokolliert das Leg.</p>
+    </header>
+
+    <main class="app-main">
+      <section class="card" aria-labelledby="setup-title">
+        <h2 id="setup-title">Spiel konfigurieren</h2>
+        <form id="setup-form" class="setup-form">
+          <div class="form-row">
+            <label for="player-one">Spieler 1</label>
+            <input id="player-one" name="playerOne" type="text" value="Player 1" required />
+          </div>
+          <div class="form-row">
+            <label for="player-two">Spieler 2</label>
+            <input id="player-two" name="playerTwo" type="text" value="Player 2" required />
+          </div>
+          <div class="form-row">
+            <label for="starting-score">Startscore</label>
+            <input id="starting-score" name="startingScore" type="number" min="101" max="1001" step="2" value="501" />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="primary">Leg starten</button>
+            <button type="button" id="reset-btn" class="ghost">Zurücksetzen</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card scoreboard" aria-labelledby="scoreboard-title">
+        <h2 id="scoreboard-title">Scoreboard</h2>
+        <div id="scoreboard" class="scoreboard-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="card voice-console" aria-labelledby="voice-title">
+        <div class="voice-header">
+          <h2 id="voice-title">Sprachsteuerung</h2>
+          <span id="voice-status" class="status offline">Inaktiv</span>
+        </div>
+        <p class="voice-tip">
+          Beispiele: „Triple 20“, „140“, „Double 16“, „Bust“, „Neuer Wurf“, „Rückgängig“.
+        </p>
+        <div class="voice-controls">
+          <button id="listen-btn" class="primary" type="button">Aufnahme starten</button>
+          <button id="stop-listen-btn" class="ghost" type="button">Aufnahme stoppen</button>
+        </div>
+        <div class="voice-readout" aria-live="assertive">
+          <p><strong>Letzte Erkennung:</strong> <span id="last-utterance">–</span></p>
+          <p><strong>Interpretation:</strong> <span id="last-interpretation">–</span></p>
+        </div>
+        <div class="fallback-manual">
+          <h3>Fallback</h3>
+          <div class="manual-row">
+            <label for="manual-score">Score manueller Wurf</label>
+            <input id="manual-score" type="number" min="0" max="180" step="1" />
+            <button id="manual-commit" type="button">Übernehmen</button>
+            <button id="manual-bust" type="button" class="ghost">Bust</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card history" aria-labelledby="history-title">
+        <h2 id="history-title">Verlauf</h2>
+        <ul id="history-log" class="history-log"></ul>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>Prototyp – keine Persistenz, optimiert für Chromium-Browser mit Web Speech API.</p>
+    </footer>
+
+    <template id="scoreboard-item-template">
+      <article class="player-card">
+        <header>
+          <h3 class="player-name"></h3>
+          <span class="player-indicator" aria-hidden="true">●</span>
+        </header>
+        <dl class="player-stats">
+          <div>
+            <dt>Rest</dt>
+            <dd class="player-score">501</dd>
+          </div>
+          <div>
+            <dt>Letzter Wurf</dt>
+            <dd class="player-last">–</dd>
+          </div>
+        </dl>
+      </article>
+    </template>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
+
