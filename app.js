@@ -14,6 +14,7 @@ const elements = {
   manualScoreInput: document.getElementById("manual-score"),
   manualCommitBtn: document.getElementById("manual-commit"),
   manualBustBtn: document.getElementById("manual-bust"),
+  dartPicker: document.getElementById("dart-picker"),
   template: document.getElementById("scoreboard-item-template"),
 };
 
@@ -86,6 +87,7 @@ function initialize() {
     }
   });
   elements.manualBustBtn.addEventListener("click", () => registerBust("Manuelle Eingabe"));
+  setupDartPicker();
 
   if (!speechEngine.supported) {
     elements.voiceStatus.textContent = "Nicht unterstützt";
@@ -196,6 +198,127 @@ function notifyVoiceStatus(status, label) {
   elements.voiceStatus.textContent = label;
 }
 
+function setupDartPicker() {
+  if (!elements.dartPicker) return;
+  const groups = [
+    {
+      key: "single",
+      title: "Single (0–20)",
+      multiplier: 1,
+      values: Array.from({ length: 21 }, (_, index) => index),
+    },
+    {
+      key: "double",
+      title: "Double (1–20)",
+      multiplier: 2,
+      values: Array.from({ length: 20 }, (_, index) => index + 1),
+    },
+    {
+      key: "triple",
+      title: "Triple (1–20)",
+      multiplier: 3,
+      values: Array.from({ length: 20 }, (_, index) => index + 1),
+    },
+    {
+      key: "bull",
+      title: "Bull",
+      entries: [
+        {
+          label: "Single Bull",
+          displayLabel: "SB",
+          score: 25,
+          isDouble: false,
+          multiplier: 1,
+          readable: "Single Bull (25)",
+        },
+        {
+          label: "Double Bull",
+          displayLabel: "DB",
+          score: 50,
+          isDouble: true,
+          multiplier: 2,
+          readable: "Double Bull (50)",
+        },
+      ],
+    },
+  ];
+
+  elements.dartPicker.innerHTML = "";
+
+  groups.forEach((group) => {
+    const section = document.createElement("section");
+    section.className = `dart-group ${group.key}`;
+
+    const heading = document.createElement("h5");
+    heading.textContent = group.title;
+    section.appendChild(heading);
+
+    const grid = document.createElement("div");
+    grid.className = "dart-grid";
+    section.appendChild(grid);
+
+    if (group.entries) {
+      group.entries.forEach((entry) => {
+        const button = createDartButton(entry);
+        grid.appendChild(button);
+      });
+    } else {
+      group.values.forEach((value) => {
+        const definition = createNumericDartDefinition(group.multiplier, value);
+        const button = createDartButton(definition);
+        grid.appendChild(button);
+      });
+    }
+
+    elements.dartPicker.appendChild(section);
+  });
+}
+
+function createNumericDartDefinition(multiplier, value) {
+  const total = value * multiplier;
+  const prefix = multiplierPrefix(multiplier);
+  const displayLabel = value === 0 ? "0" : `${prefix}${value}`;
+  const label =
+    value === 0 ? "0" : `${multiplierDisplay(multiplier)} ${value}`.trim();
+
+  return {
+    label,
+    displayLabel,
+    score: total,
+    isDouble: multiplier === 2 && value !== 0,
+    multiplier,
+    readable: value === 0 ? "0" : `${label} (${total})`,
+  };
+}
+
+function createDartButton(definition) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dart-button";
+  const valueLabel = definition.readable || `${definition.label} (${definition.score})`;
+  button.innerHTML = `
+    <span>${definition.displayLabel || definition.label}</span>
+    <span class="value">${definition.score}</span>
+  `;
+  button.title = valueLabel;
+  button.addEventListener("click", () => handleDartClick(definition));
+  return button;
+}
+
+function handleDartClick(definition) {
+  if (!gameState.legActive) return;
+  applyDart({
+    type: "dart",
+    readable: definition.readable || definition.label,
+    dart: {
+      label: definition.label,
+      score: definition.score,
+      isDouble: Boolean(definition.isDouble),
+      multiplier: definition.multiplier || 1,
+    },
+  });
+}
+
 function interpretUtterance(raw) {
   if (!raw) return { type: "noop", readable: "Keine Eingabe" };
 
@@ -283,7 +406,7 @@ function parseDartPhrase(text) {
   if (/bull/.test(text)) {
     const isDoubleBull = /double|doppel/.test(text);
     return {
-      label: isDoubleBull ? "Double Bull (50)" : "Single Bull (25)",
+      label: isDoubleBull ? "Double Bull" : "Single Bull",
       score: isDoubleBull ? 50 : 25,
       isDouble: isDoubleBull,
       multiplier: isDoubleBull ? 2 : 1,
@@ -297,7 +420,7 @@ function parseDartPhrase(text) {
     if (text.includes(keyword)) {
       if (value === 25 || value === 50) {
         return {
-          label: keyword === "singlebull" ? "Single Bull (25)" : "Bull (50)",
+          label: value === 50 ? "Double Bull" : "Single Bull",
           score: value,
           isDouble: value === 50,
           multiplier: value === 50 ? 2 : 1,
@@ -322,19 +445,8 @@ function parseDartPhrase(text) {
 
   if (!Number.isFinite(base) || base < 0 || base > 20) return null;
   const score = base * multiplier;
-  const label = `${multiplierLabel(multiplier)} ${base}`.trim();
+  const label = base === 0 ? "0" : `${multiplierDisplay(multiplier)} ${base}`.trim();
   return { label, score, isDouble: multiplier === 2, multiplier };
-}
-
-function multiplierLabel(multiplier) {
-  switch (multiplier) {
-    case 2:
-      return "Double";
-    case 3:
-      return "Triple";
-    default:
-      return "";
-  }
 }
 
 function applyDart(interpretation) {
@@ -568,4 +680,30 @@ function uid() {
     return window.crypto.randomUUID();
   }
   return `id-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function multiplierDisplay(multiplier) {
+  switch (multiplier) {
+    case 1:
+      return "Single";
+    case 2:
+      return "Double";
+    case 3:
+      return "Triple";
+    default:
+      return "";
+  }
+}
+
+function multiplierPrefix(multiplier) {
+  switch (multiplier) {
+    case 1:
+      return "S";
+    case 2:
+      return "D";
+    case 3:
+      return "T";
+    default:
+      return "";
+  }
 }

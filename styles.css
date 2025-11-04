@@ -262,6 +262,81 @@ button.ghost {
   border: 1px solid var(--surface-border);
 }
 
+.manual-picker {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.manual-picker h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.dart-picker {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.dart-group {
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  padding: 0.5rem;
+  background: rgba(23, 32, 54, 0.03);
+}
+
+.dart-group h5 {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.dart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  gap: 0.35rem;
+}
+
+.dart-button {
+  border-radius: 8px;
+  border: 1px solid rgba(36, 85, 245, 0.25);
+  background: rgba(36, 85, 245, 0.08);
+  color: var(--text);
+  font-weight: 600;
+  padding: 0.45rem 0.2rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.dart-button:hover {
+  background: rgba(36, 85, 245, 0.18);
+  border-color: rgba(36, 85, 245, 0.45);
+}
+
+.dart-button:active {
+  transform: translateY(1px);
+}
+
+.dart-button span {
+  display: block;
+  line-height: 1.1;
+}
+
+.dart-button .value {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 .history-log {
   list-style: none;
   margin: 0;
@@ -304,4 +379,3 @@ button.ghost {
     grid-template-columns: 1fr;
   }
 }
-
