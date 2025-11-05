@@ -28,6 +28,10 @@ const MATCH_MODES = {
   },
 };
 const DEFAULT_MATCH_MODE = "single";
+const DART_SWIPE_MIN_DISTANCE = 30;
+const DART_SWIPE_PREVIEW_THRESHOLD = 12;
+const DART_SWIPE_MAX_OFFSET = 18;
+const DART_SWIPE_FEEDBACK_TIMEOUT = 250;
 
 const elements = {
   setupForm: document.getElementById("setup-form"),
@@ -74,6 +78,9 @@ const elements = {
   leaderboardBody: document.getElementById("leaderboard-body"),
   leaderboardEmpty: document.getElementById("leaderboard-empty"),
 };
+
+const dartSwipePointers = new Map();
+const dartSwipeBoundButtons = new WeakSet();
 
 const gameState = {
   players: [],
@@ -1123,6 +1130,7 @@ function initializeDartPicker() {
   gameState.dartMultiplier = MULTIPLIER_CONFIG[gameState.dartMultiplier] ? gameState.dartMultiplier : 1;
   updateDartModeButtons();
   updateDartNumberButtons();
+  setupDartSwipeGestures();
 }
 
 function setDartMultiplier(multiplier) {
@@ -1167,6 +1175,167 @@ function updateDartNumberButtons() {
       valueNode.textContent = String(score);
     }
   });
+}
+
+function setupDartSwipeGestures() {
+  if (!elements.dartNumberButtons.length) return;
+  elements.dartNumberButtons.forEach((button) => {
+    if (dartSwipeBoundButtons.has(button)) return;
+    dartSwipeBoundButtons.add(button);
+    button.addEventListener("pointerdown", onDartNumberPointerDown);
+    button.addEventListener("pointermove", onDartNumberPointerMove);
+    button.addEventListener("pointerup", onDartNumberPointerUp);
+    button.addEventListener("pointercancel", onDartNumberPointerCancel);
+    button.addEventListener("pointerleave", onDartNumberPointerCancel);
+  });
+}
+
+function onDartNumberPointerDown(event) {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  const button = event.currentTarget;
+  dartSwipePointers.set(event.pointerId, {
+    button,
+    startX: event.clientX,
+    startY: event.clientY,
+    previewMultiplier: null,
+  });
+  if (typeof button.setPointerCapture === "function") {
+    try {
+      button.setPointerCapture(event.pointerId);
+    } catch {
+      /* Ignore capture errors */
+    }
+  }
+}
+
+function onDartNumberPointerMove(event) {
+  const state = dartSwipePointers.get(event.pointerId);
+  if (!state || state.button !== event.currentTarget) return;
+
+  const deltaX = event.clientX - state.startX;
+  const deltaY = event.clientY - state.startY;
+
+  if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) >= DART_SWIPE_PREVIEW_THRESHOLD) {
+    if (typeof event.preventDefault === "function") {
+      event.preventDefault();
+    }
+    const multiplier = deltaX > 0 ? 2 : 3;
+    if (state.previewMultiplier !== multiplier) {
+      state.previewMultiplier = multiplier;
+    }
+    applyDartSwipePreview(state.button, multiplier, deltaX);
+  } else if (state.previewMultiplier) {
+    state.previewMultiplier = null;
+    clearDartSwipePreview(state.button);
+  }
+}
+
+function onDartNumberPointerUp(event) {
+  const button = event.currentTarget;
+  if (typeof button.releasePointerCapture === "function") {
+    try {
+      button.releasePointerCapture(event.pointerId);
+    } catch {
+      /* Ignore release errors */
+    }
+  }
+  const state = dartSwipePointers.get(event.pointerId);
+  dartSwipePointers.delete(event.pointerId);
+  if (!state || state.button !== button) return;
+
+  clearDartSwipePreview(button);
+
+  const deltaX = event.clientX - state.startX;
+  const deltaY = event.clientY - state.startY;
+  const absDeltaX = Math.abs(deltaX);
+  const absDeltaY = Math.abs(deltaY);
+
+  if (absDeltaX < DART_SWIPE_MIN_DISTANCE || absDeltaX <= absDeltaY) {
+    return;
+  }
+
+  const multiplier = deltaX > 0 ? 2 : 3;
+  handleDartSwipe(button, multiplier, event);
+}
+
+function onDartNumberPointerCancel(event) {
+  const button = event.currentTarget;
+  if (typeof button.releasePointerCapture === "function") {
+    try {
+      button.releasePointerCapture(event.pointerId);
+    } catch {
+      /* Ignore release errors */
+    }
+  }
+  clearDartSwipePreview(button);
+  dartSwipePointers.delete(event.pointerId);
+}
+
+function applyDartSwipePreview(button, multiplier, deltaX) {
+  const clampedOffset = Math.max(Math.min(deltaX, DART_SWIPE_MAX_OFFSET), -DART_SWIPE_MAX_OFFSET);
+  const classToAdd = multiplier === 2 ? "swipe-preview-double" : "swipe-preview-triple";
+  const classToRemove = multiplier === 2 ? "swipe-preview-triple" : "swipe-preview-double";
+  button.classList.remove("swipe-double", "swipe-triple");
+  button.classList.add(classToAdd);
+  button.classList.remove(classToRemove);
+  button.style.setProperty("--dart-swipe-offset", `${clampedOffset}px`);
+}
+
+function clearDartSwipePreview(button) {
+  button.classList.remove("swipe-preview-double", "swipe-preview-triple");
+  button.style.removeProperty("--dart-swipe-offset");
+}
+
+function handleDartSwipe(button, multiplier, event) {
+  clearDartSwipePreview(button);
+  if (!gameState.legActive || button.disabled) return;
+  if (!MULTIPLIER_CONFIG[multiplier]) return;
+
+  const base = parseInt(button.dataset.number || "0", 10);
+  if (!Number.isFinite(base) || base <= 0) return;
+
+  const config = MULTIPLIER_CONFIG[multiplier];
+  const score = base * multiplier;
+  const label = `${config.short}${base}`;
+  const readable = `${config.label} ${base}`;
+
+  if (event && typeof event.preventDefault === "function") {
+    event.preventDefault();
+  }
+
+  blockNextClick(button);
+  triggerSwipeFeedback(button, multiplier);
+
+  applyDart({
+    type: "dart",
+    readable,
+    dart: {
+      label,
+      score,
+      isDouble: multiplier === 2,
+      multiplier,
+    },
+  });
+}
+
+function blockNextClick(button) {
+  const suppressClick = (event) => {
+    event.stopImmediatePropagation();
+    event.preventDefault();
+  };
+  button.addEventListener("click", suppressClick, { once: true, capture: true });
+}
+
+function triggerSwipeFeedback(button, multiplier) {
+  button.classList.remove("swipe-preview-double", "swipe-preview-triple");
+  const className = multiplier === 2 ? "swipe-double" : "swipe-triple";
+  const offset = multiplier === 2 ? "6px" : "-6px";
+  button.style.setProperty("--dart-swipe-offset", offset);
+  button.classList.add(className);
+  setTimeout(() => {
+    button.classList.remove(className);
+    button.style.removeProperty("--dart-swipe-offset");
+  }, DART_SWIPE_FEEDBACK_TIMEOUT);
 }
 
 function updateUndoAvailability() {

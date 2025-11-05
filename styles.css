@@ -1034,6 +1034,7 @@ body:not(.sets-mode) .player-legs-wrapper {
   gap: 0.15rem;
   transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
   width: 100%;
+  touch-action: pan-y;
 }
 
 .dart-button:hover {
@@ -1048,6 +1049,36 @@ body:not(.sets-mode) .player-legs-wrapper {
 .dart-button[disabled] {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.dart-button.swipe-double,
+.dart-button.swipe-triple {
+  transform: translateX(var(--dart-swipe-offset, 0));
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.dart-button.swipe-preview-double {
+  background: rgba(46, 204, 113, 0.22);
+  border-color: rgba(46, 204, 113, 0.55);
+  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2);
+}
+
+.dart-button.swipe-preview-triple {
+  background: rgba(246, 173, 85, 0.22);
+  border-color: rgba(246, 173, 85, 0.55);
+  box-shadow: 0 0 0 3px rgba(246, 173, 85, 0.2);
+}
+
+.dart-button.swipe-double {
+  background: rgba(46, 204, 113, 0.3);
+  border-color: rgba(46, 204, 113, 0.65);
+  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.24);
+}
+
+.dart-button.swipe-triple {
+  background: rgba(246, 173, 85, 0.3);
+  border-color: rgba(246, 173, 85, 0.65);
+  box-shadow: 0 0 0 3px rgba(246, 173, 85, 0.24);
 }
 
 .dart-bull {
