@@ -127,4 +127,9 @@ function applyDart(gameState, dartResult) {
 - Sets
 - best of 3
 - Sprachsteuerung starten per Codewort (Spielername 1,20,Triple 1)
+- Checkout Vorschläge
+- Heatmap pro Spieler
+- Soundeffekte 180
+- Darkmode
+- TastaturEingabe
 
