@@ -37,6 +37,26 @@ body {
   border-bottom: 1px solid var(--surface-border);
 }
 
+.app-header {
+  position: relative;
+  isolation: isolate;
+  padding: 3.5rem 1rem 2.75rem;
+  color: #fff;
+  background: linear-gradient(
+      135deg,
+      rgba(15, 22, 40, 0.7),
+      rgba(36, 85, 245, 0.5)
+    ),
+    url("image.png") center/cover no-repeat;
+  border-bottom: none;
+  box-shadow: 0 18px 40px rgba(23, 32, 54, 0.18);
+}
+
+.app-header > * {
+  position: relative;
+  z-index: 1;
+}
+
 .app-footer {
   border-top: 1px solid var(--surface-border);
   border-bottom: none;
@@ -189,9 +209,17 @@ h3 {
   color: var(--text);
 }
 
+.app-header h1 {
+  color: #fff;
+}
+
 .tagline {
   margin: 0;
   color: var(--text-muted);
+}
+
+.app-header .tagline {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .view-toggle {
@@ -202,6 +230,12 @@ h3 {
   padding: 0.25rem;
   border-radius: 999px;
   border: 1px solid rgba(36, 85, 245, 0.2);
+}
+
+.app-header .view-toggle {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(2px);
 }
 
 .view-toggle-btn {
@@ -222,6 +256,20 @@ h3 {
   background: var(--primary);
   color: #fff;
   box-shadow: 0 10px 20px rgba(36, 85, 245, 0.25);
+}
+
+.app-header .view-toggle-btn {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.app-header .view-toggle-btn:hover {
+  color: #fff;
+}
+
+.app-header .view-toggle-btn.active {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 14px 28px rgba(17, 24, 39, 0.25);
 }
 
 .setup-form {
