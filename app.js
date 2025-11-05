@@ -221,19 +221,18 @@ function startGame(playerConfigs, startingScore, outMode = DEFAULT_OUT_MODE) {
 
   gameState.players = configs.map((config, index) => {
     const profile = getProfileById(config.profileId);
-    const fallbackName = config.name || `Player ${index + 1}`;
+    const fallbackName = (config.name || `Player ${index + 1}`).trim();
     const displayName = profile ? getProfileDisplayName(profile) : fallbackName;
-    const fullName = profile
-      ? `${profile.firstName} ${profile.lastName}`.trim()
-      : fallbackName;
+    const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : "";
+    const photo = profile?.image || null;
 
     return {
       id: `p${index + 1}`,
-      name: displayName,
+      name: fallbackName,
       displayName,
       fullName,
       profileId: profile ? profile.id : "",
-      photo: profile?.image || null,
+      photo,
       score: startingScore,
       history: [],
       lastTurn: null,
@@ -421,7 +420,7 @@ function interpretUtterance(raw) {
     };
   }
 
-  return { type: "noop", readable: `Keine Zuordnung für „${raw}“` };
+  return { type: "noop", readable: `Keine Zuordnung für "${raw}"` };
 }
 
 function containsCommand(text, lexemes) {
@@ -636,7 +635,7 @@ function pushHistory(turn, player, legWon = false) {
   const entry = {
     id: uid(),
     playerId: player.id,
-    playerName: player.displayName || player.name,
+    playerName: getPlayerDisplayName(player),
     darts: turn.darts.map((dart) => ({ ...dart, label: shortLabelForDart(dart) })),
     spoken: [...turn.spoken],
     bust: turn.bust,
@@ -698,6 +697,7 @@ function undoLastTurn() {
   gameState.activeIndex = lastSnapshot.activeIndex;
   gameState.legActive = lastSnapshot.legActive;
   gameState.winnerId = lastSnapshot.winnerId;
+  gameState.statsCommitted = false;
   gameState.players.forEach((player) => {
     const snapshotPlayer = lastSnapshot.players.find((p) => p.id === player.id);
     if (snapshotPlayer) {
@@ -749,7 +749,7 @@ function renderScoreboard() {
     const scoreNode = fragment.querySelector(".player-score");
     const lastNode = fragment.querySelector(".player-last");
 
-    const displayName = player.displayName || player.name;
+    const displayName = getPlayerDisplayName(player);
     nameNode.textContent = displayName;
     if (metaNode) {
       const fullName = player.fullName && player.fullName !== displayName ? player.fullName : "";
@@ -757,18 +757,21 @@ function renderScoreboard() {
       metaNode.hidden = !fullName;
     }
     if (avatarFallback) {
-      const initial = (displayName || player.name || "?").charAt(0).toUpperCase() || "?";
+      const initial = (displayName || "?").charAt(0).toUpperCase() || "?";
       avatarFallback.textContent = initial;
     }
     if (avatarImage) {
+      avatarImage.alt = displayName || "Profilbild";
       if (player.photo) {
         avatarImage.src = player.photo;
         avatarImage.hidden = false;
-        avatarWrapper?.classList.add("has-photo");
       } else {
+        avatarImage.src = "";
         avatarImage.hidden = true;
-        avatarWrapper?.classList.remove("has-photo");
       }
+    }
+    if (avatarWrapper) {
+      avatarWrapper.classList.toggle("has-photo", Boolean(player.photo));
     }
 
     scoreNode.textContent = player.score;
@@ -793,12 +796,24 @@ function renderHistory() {
     const li = document.createElement("li");
     li.className = "history-item";
     if (entry.bust) li.classList.add("bust");
-    const summary = entry.darts.map((dart) => shortLabelForDart(dart)).join(", ") || "-";
-    li.innerHTML = `
-      <span class="player">${entry.playerName}</span>
-      <span class="summary">${summary}</span>
-      <span class="remaining">${entry.bust ? "Bust" : `Rest: ${entry.remaining}`}${entry.legWon ? " 🎯" : ""}</span>
-    `;
+
+    const playerSpan = document.createElement("span");
+    playerSpan.className = "player";
+    playerSpan.textContent = entry.playerName;
+
+    const summarySpan = document.createElement("span");
+    summarySpan.className = "summary";
+    summarySpan.textContent = entry.darts.map((dart) => shortLabelForDart(dart)).join(", ") || "-";
+
+    const remainingSpan = document.createElement("span");
+    remainingSpan.className = "remaining";
+    const remainingText = entry.bust ? "Bust" : `Rest: ${entry.remaining}`;
+    remainingSpan.textContent = entry.legWon ? `${remainingText} 🎯` : remainingText;
+
+    li.appendChild(playerSpan);
+    li.appendChild(summarySpan);
+    li.appendChild(remainingSpan);
+
     elements.historyLog.appendChild(li);
   });
 }
@@ -997,16 +1012,19 @@ function updateActivePlayerBanner() {
     message = "";
   } else if (gameState.winnerId) {
     const winner = gameState.players.find((player) => player.id === gameState.winnerId);
-    message = winner ? `Leg gewonnen von ${winner.displayName || winner.name}` : "";
+    const winnerName = getPlayerDisplayName(winner);
+    message = winnerName ? `Leg gewonnen von ${winnerName}` : "";
   } else if (!gameState.legActive) {
     const starter = gameState.players[gameState.activeIndex] || gameState.players[0];
-    message = starter ? `Bereit: ${starter.name} startet das nächste Leg` : "";
+    const starterName = getPlayerDisplayName(starter);
+    message = starterName ? `Bereit: ${starterName} startet das nächste Leg` : "";
   } else {
     const active = gameState.players[gameState.activeIndex];
     if (active) {
+      const activeName = getPlayerDisplayName(active);
       const dartsThrown = gameState.currentTurn?.darts.length ?? 0;
-      const dartsInfo = dartsThrown ? ` – ${dartsThrown}/3 Darts` : "";
-      message = `Am Zug: ${active.name} – Rest ${active.score}${dartsInfo}`;
+      const dartsInfo = dartsThrown ? ` - ${dartsThrown}/3 Darts` : "";
+      message = `Am Zug: ${activeName} - Rest ${active.score}${dartsInfo}`;
     }
   }
 
@@ -1380,6 +1398,12 @@ function getProfileDisplayName(profile) {
   const nickname = (profile.nickname || "").trim();
   if (nickname) return nickname;
   return `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || "Unbenannt";
+}
+
+function getPlayerDisplayName(player) {
+  if (!player) return "";
+  const value = (player.displayName || player.name || "").toString().trim();
+  return value;
 }
 
 function ensureProfileStats(profile) {
