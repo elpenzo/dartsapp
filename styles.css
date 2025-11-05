@@ -194,6 +194,83 @@ body.profiles-view .profile-manager {
   grid-column: 1 / -1;
 }
 
+.leaderboard-card {
+  display: none;
+}
+
+.leaderboard-view .app-main,
+body.leaderboard-view .app-main {
+  width: min(900px, 94vw);
+  grid-template-columns: 1fr;
+}
+
+.leaderboard-view .setup-card,
+.leaderboard-view .scoreboard,
+.leaderboard-view .voice-console,
+.leaderboard-view .history,
+.leaderboard-view .profile-manager {
+  display: none;
+}
+
+.leaderboard-view .leaderboard-card,
+body.leaderboard-view .leaderboard-card {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+.leaderboard-controls {
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.leaderboard-sort-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.leaderboard-sort-btn.active {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.leaderboard-table-wrapper {
+  position: relative;
+  overflow-x: auto;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.leaderboard-table tbody tr:nth-child(odd) {
+  background: rgba(36, 85, 245, 0.05);
+}
+
+.leaderboard-table tbody tr:first-child td {
+  font-weight: 700;
+}
+
+.leaderboard-empty {
+  margin-top: 1rem;
+  color: var(--muted);
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--surface-border);

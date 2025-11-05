@@ -16,6 +16,7 @@
       <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
       <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
       <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
+      <button type="button" class="view-toggle-btn" data-view="leaderboard">Leaderboard</button>
     </div>
   </header>
 
@@ -252,6 +253,30 @@
       <div class="profile-list-container">
         <h3>Gespeicherte Profile</h3>
         <ul id="profile-list" class="profile-list"></ul>
+      </div>
+    </section>
+
+    <section class="card leaderboard-card" aria-labelledby="leaderboard-title">
+      <h2 id="leaderboard-title">Leaderboard</h2>
+      <div class="leaderboard-controls" role="group" aria-label="Sortierung wählen">
+        <button type="button" class="leaderboard-sort-btn active" data-sort="average">Ø Punkte/Dart</button>
+        <button type="button" class="leaderboard-sort-btn" data-sort="legs">Legs gewonnen</button>
+      </div>
+      <div class="leaderboard-table-wrapper">
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th scope="col">Platz</th>
+              <th scope="col">Spieler</th>
+              <th scope="col">Ø/Dart</th>
+              <th scope="col">Ø 3-Dart</th>
+              <th scope="col">Legs</th>
+              <th scope="col">Spiele</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+        <p id="leaderboard-empty" class="leaderboard-empty" hidden>Keine Profile mit Statistiken vorhanden.</p>
       </div>
     </section>
   </main>

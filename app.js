@@ -51,6 +51,10 @@ const elements = {
   profileFirstName: document.getElementById("profile-first-name"),
   profileLastName: document.getElementById("profile-last-name"),
   profileNickname: document.getElementById("profile-nickname"),
+  leaderboardCard: document.querySelector(".leaderboard-card"),
+  leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
+  leaderboardBody: document.getElementById("leaderboard-body"),
+  leaderboardEmpty: document.getElementById("leaderboard-empty"),
 };
 
 const gameState = {
@@ -66,6 +70,7 @@ const gameState = {
   dartMultiplier: 1,
   viewMode: "setup",
   statsCommitted: false,
+  leaderboardSort: "average",
 };
 
 let profiles = [];
@@ -149,6 +154,11 @@ function initialize() {
       button.addEventListener("click", () => applyCombo(button.dataset.combo));
     });
   }
+  if (elements.leaderboardSortButtons.length) {
+    elements.leaderboardSortButtons.forEach((button) => {
+      button.addEventListener("click", () => setLeaderboardSort(button.dataset.sort || "average"));
+    });
+  }
   if (elements.playerOneProfileSelect && elements.playerOneInput) {
     elements.playerOneProfileSelect.addEventListener("change", () =>
       handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1")
@@ -175,6 +185,7 @@ function initialize() {
   loadProfiles();
   handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
   handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+  renderLeaderboard();
 
   updateViewModeUI();
 
