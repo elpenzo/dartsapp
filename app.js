@@ -983,7 +983,7 @@ function finalizeGameStats() {
 }
 
 function setViewMode(view) {
-  const normalized = view === "play" || view === "profiles" ? view : "setup";
+  const normalized = ["play", "profiles", "leaderboard"].includes(view) ? view : "setup";
   if (gameState.viewMode === normalized) {
     updateViewModeUI();
     return;
@@ -998,6 +998,10 @@ function setViewMode(view) {
     requestAnimationFrame(() => {
       elements.profileManager?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
+  } else if (normalized === "leaderboard") {
+    requestAnimationFrame(() => {
+      elements.leaderboardCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 }
 
@@ -1005,6 +1009,7 @@ function updateViewModeUI() {
   const currentView = gameState.viewMode;
   document.body.classList.toggle("play-view", currentView === "play");
   document.body.classList.toggle("profiles-view", currentView === "profiles");
+  document.body.classList.toggle("leaderboard-view", currentView === "leaderboard");
   elements.viewToggleButtons.forEach((button) => {
     const isActive = button.dataset.view === currentView;
     button.classList.toggle("active", isActive);
@@ -1012,6 +1017,8 @@ function updateViewModeUI() {
   });
   if (currentView === "play") {
     updateActivePlayerBanner();
+  } else if (currentView === "leaderboard") {
+    renderLeaderboard();
   }
 }
 
@@ -1341,6 +1348,7 @@ function renderProfileList() {
   if (!elements.profileList) return;
   if (!profiles.length) {
     elements.profileList.innerHTML = '<li class="profile-empty">Noch keine Profile gespeichert.</li>';
+    renderLeaderboard();
     return;
   }
 
@@ -1397,6 +1405,7 @@ function renderProfileList() {
 
   elements.profileList.innerHTML = "";
   elements.profileList.appendChild(fragment);
+  renderLeaderboard();
 }
 
 function getProfileById(id) {
@@ -1415,6 +1424,142 @@ function getPlayerDisplayName(player) {
   if (!player) return "";
   const value = (player.displayName || player.name || "").toString().trim();
   return value;
+}
+
+function setLeaderboardSort(sortKey) {
+  const normalized = sortKey === "legs" ? "legs" : "average";
+  if (gameState.leaderboardSort === normalized) return;
+  gameState.leaderboardSort = normalized;
+  updateLeaderboardSortButtons();
+  renderLeaderboard();
+}
+
+function updateLeaderboardSortButtons() {
+  elements.leaderboardSortButtons.forEach((button) => {
+    const key = button.dataset.sort || "average";
+    const isActive = key === gameState.leaderboardSort;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function renderLeaderboard() {
+  if (!elements.leaderboardBody || !elements.leaderboardEmpty) return;
+  updateLeaderboardSortButtons();
+
+  const leaderboardEntries = profiles
+    .map((profile) => {
+      ensureProfileStats(profile);
+      const stats = profile.stats;
+      const darts = Number(stats.totalDarts) || 0;
+      const points = Number(stats.totalPoints) || 0;
+      const games = Number(stats.gamesPlayed) || 0;
+      const legs = Number(stats.legsWon) || 0;
+      const averageValue = darts > 0 ? points / darts : 0;
+      return {
+        profile,
+        displayName: getProfileDisplayName(profile),
+        fullName: `${profile.firstName || ""} ${profile.lastName || ""}`.trim(),
+        averageValue,
+        threeDartAverageValue: averageValue * 3,
+        averageLabel: formatAverage(points, darts),
+        threeDartLabel: darts > 0 ? (averageValue * 3).toFixed(2) : "0.00",
+        legs,
+        games,
+        hasStats: games > 0 || darts > 0,
+      };
+    })
+    .filter((entry) => entry.hasStats);
+
+  const sortKey = gameState.leaderboardSort;
+  leaderboardEntries.sort((a, b) => {
+    if (sortKey === "legs") {
+      if (b.legs !== a.legs) return b.legs - a.legs;
+      if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
+    } else {
+      if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
+      if (b.legs !== a.legs) return b.legs - a.legs;
+    }
+    if (b.games !== a.games) return b.games - a.games;
+    return a.displayName.localeCompare(b.displayName, "de-DE");
+  });
+
+  elements.leaderboardBody.innerHTML = "";
+
+  if (!leaderboardEntries.length) {
+    elements.leaderboardEmpty.hidden = false;
+    return;
+  }
+
+  elements.leaderboardEmpty.hidden = true;
+
+  const fragment = document.createDocumentFragment();
+
+  leaderboardEntries.forEach((entry, index) => {
+    const tr = document.createElement("tr");
+
+    const rankCell = document.createElement("td");
+    rankCell.textContent = String(index + 1);
+    tr.appendChild(rankCell);
+
+    const playerCell = document.createElement("td");
+    const playerWrapper = document.createElement("div");
+    playerWrapper.className = "leaderboard-player-cell";
+
+    const avatarWrapper = document.createElement("div");
+    avatarWrapper.className = "leaderboard-avatar";
+    const displayName = entry.displayName || "Unbenannt";
+    if (entry.profile.image) {
+      const img = document.createElement("img");
+      img.src = entry.profile.image;
+      img.alt = displayName;
+      avatarWrapper.classList.add("has-photo");
+      avatarWrapper.appendChild(img);
+    } else {
+      const fallback = document.createElement("span");
+      fallback.className = "leaderboard-avatar-fallback";
+      fallback.textContent = displayName.charAt(0).toUpperCase() || "?";
+      avatarWrapper.appendChild(fallback);
+    }
+
+    const nameWrapper = document.createElement("div");
+    nameWrapper.className = "leaderboard-player-text";
+    const nicknameEl = document.createElement("span");
+    nicknameEl.className = "leaderboard-player-name";
+    nicknameEl.textContent = displayName;
+    nameWrapper.appendChild(nicknameEl);
+    if (entry.fullName) {
+      const fullNameEl = document.createElement("span");
+      fullNameEl.className = "leaderboard-player-full";
+      fullNameEl.textContent = entry.fullName;
+      nameWrapper.appendChild(fullNameEl);
+    }
+
+    playerWrapper.appendChild(avatarWrapper);
+    playerWrapper.appendChild(nameWrapper);
+    playerCell.appendChild(playerWrapper);
+    tr.appendChild(playerCell);
+
+    const averageCell = document.createElement("td");
+    averageCell.textContent = entry.averageLabel;
+    tr.appendChild(averageCell);
+
+    const threeDartCell = document.createElement("td");
+    threeDartCell.textContent = entry.threeDartLabel;
+    tr.appendChild(threeDartCell);
+
+    const legsCell = document.createElement("td");
+    legsCell.textContent = String(entry.legs);
+    tr.appendChild(legsCell);
+
+    const gamesCell = document.createElement("td");
+    gamesCell.textContent = String(entry.games);
+    tr.appendChild(gamesCell);
+
+    fragment.appendChild(tr);
+  });
+
+  elements.leaderboardBody.appendChild(fragment);
 }
 
 function ensureProfileStats(profile) {
