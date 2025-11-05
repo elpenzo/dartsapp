@@ -1,5 +1,15 @@
 const DEFAULT_STARTING_SCORE = 501;
+const DEFAULT_OUT_MODE = "double";
 const MAX_DARTS_PER_TURN = 3;
+const MULTIPLIER_CONFIG = {
+  1: { label: "Single", short: "S", isDouble: false },
+  2: { label: "Double", short: "D", isDouble: true },
+  3: { label: "Triple", short: "T", isDouble: false },
+};
+const OUT_MODE_LABELS = {
+  double: "Double Out",
+  single: "Single Out",
+};
 
 const elements = {
   setupForm: document.getElementById("setup-form"),
@@ -16,17 +26,26 @@ const elements = {
   manualBustBtn: document.getElementById("manual-bust"),
   dartPicker: document.getElementById("dart-picker"),
   template: document.getElementById("scoreboard-item-template"),
+  startingScoreSelect: document.getElementById("starting-score"),
+  outModeSelect: document.getElementById("out-mode"),
+  gameSettings: document.getElementById("game-settings"),
+  undoBtn: document.getElementById("undo-btn"),
+  dartModeSwitch: document.querySelector(".dart-mode-switch"),
+  dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
+  dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
 };
 
 const gameState = {
   players: [],
   activeIndex: 0,
   startingScore: DEFAULT_STARTING_SCORE,
+  outMode: DEFAULT_OUT_MODE,
   legActive: false,
   currentTurn: null,
   history: [],
   winnerId: null,
   snapshots: [],
+  dartMultiplier: 1,
 };
 
 class SpeechEngine {
@@ -87,8 +106,15 @@ function initialize() {
     }
   });
   elements.manualBustBtn.addEventListener("click", () => registerBust("Manuelle Eingabe"));
+  if (elements.undoBtn) {
+    elements.undoBtn.addEventListener("click", () => undoLastTurn());
+  }
   if (elements.dartPicker) {
+    initializeDartPicker();
     elements.dartPicker.addEventListener("click", onDartPickerClick);
+  }
+  if (elements.dartModeSwitch) {
+    elements.dartModeSwitch.addEventListener("click", onDartModeClick);
   }
 
   if (!speechEngine.supported) {
@@ -106,11 +132,13 @@ function onSetupSubmit(event) {
   const formData = new FormData(event.currentTarget);
   const playerNames = [formData.get("playerOne"), formData.get("playerTwo")].filter(Boolean);
   const startingScore = parseInt(formData.get("startingScore"), 10) || DEFAULT_STARTING_SCORE;
+  const outModeRaw = formData.get("outMode");
+  const outMode = OUT_MODE_LABELS[outModeRaw] ? outModeRaw : DEFAULT_OUT_MODE;
 
-  startGame(playerNames, startingScore);
+  startGame(playerNames, startingScore, outMode);
 }
 
-function startGame(playerNames, startingScore) {
+function startGame(playerNames, startingScore, outMode = DEFAULT_OUT_MODE) {
   gameState.players = playerNames.map((name, index) => ({
     id: `p${index + 1}`,
     name,
@@ -120,6 +148,7 @@ function startGame(playerNames, startingScore) {
   }));
   gameState.activeIndex = 0;
   gameState.startingScore = startingScore;
+  gameState.outMode = OUT_MODE_LABELS[outMode] ? outMode : DEFAULT_OUT_MODE;
   gameState.legActive = true;
   gameState.currentTurn = createNewTurn();
   gameState.history = [];
@@ -130,11 +159,11 @@ function startGame(playerNames, startingScore) {
 }
 
 function resetGame() {
-  startGame(["Player 1", "Player 2"], DEFAULT_STARTING_SCORE);
+  startGame(["Player 1", "Player 2"], DEFAULT_STARTING_SCORE, DEFAULT_OUT_MODE);
   elements.setupForm.reset();
   elements.manualScoreInput.value = "";
-  elements.lastUtterance.textContent = "–";
-  elements.lastInterpretation.textContent = "–";
+  elements.lastUtterance.textContent = "-";
+  elements.lastInterpretation.textContent = "-";
 }
 
 function createNewTurn() {
@@ -198,6 +227,16 @@ function handleSpeechState(state, error) {
 function notifyVoiceStatus(status, label) {
   elements.voiceStatus.className = `status ${status}`;
   elements.voiceStatus.textContent = label;
+}
+
+function onDartModeClick(event) {
+  const button = event.target.closest(".dart-mode-button");
+  if (!button) return;
+
+  const multiplier = parseInt(button.dataset.multiplier || "1", 10);
+  if (!Number.isFinite(multiplier) || !MULTIPLIER_CONFIG[multiplier]) return;
+
+  setDartMultiplier(multiplier);
 }
 
 function onDartPickerClick(event) {
@@ -361,9 +400,14 @@ function applyDart(interpretation) {
 
   const dart = interpretation.dart;
   const remaining = player.score - dart.score;
+  const requiresDouble = requiresDoubleCheckout();
 
-  if (remaining < 0 || (remaining === 0 && !dart.isDouble)) {
-    registerBust(dart.label);
+  if (remaining < 0 || (remaining === 0 && requiresDouble && !dart.isDouble)) {
+    const reason =
+      remaining === 0 && requiresDouble && !dart.isDouble
+        ? `${dart.label} - Double benötigt`
+        : dart.label;
+    registerBust(reason);
     return;
   }
 
@@ -390,20 +434,19 @@ function applyTurnResult(result) {
   if (!player) return;
 
   const remaining = player.score - result.score;
+  const requiresDouble = requiresDoubleCheckout();
 
   if (remaining < 0) {
     registerBust(result.label);
     return;
   }
 
-  if (remaining === 0) {
-    notifyVoiceStatus("error", "Double zum Ausmachen benötigt");
+  if (remaining === 0 && requiresDouble) {
+    notifyVoiceStatus("error", `${outModeLabel()} benötigt ein Double zum Checkout`);
     return;
   }
 
   recordSnapshot();
-  player.score = remaining;
-  player.lastTurn = `${result.score}`;
 
   const turn =
     gameState.currentTurn && gameState.currentTurn.playerId === player.id
@@ -416,14 +459,26 @@ function applyTurnResult(result) {
           spoken: [],
         };
 
+  player.score = remaining;
+  player.lastTurn = `${result.score}`;
+
   turn.darts = [{ label: `${result.score}`, score: result.score, isDouble: false }];
   turn.spoken = [result.readable || result.label];
   turn.bust = false;
 
-  pushHistory(turn, player);
+  const legWon = remaining === 0;
+
+  pushHistory(turn, player, legWon);
   player.history.push(turn);
   gameState.currentTurn = null;
-  advancePlayer();
+
+  if (legWon) {
+    gameState.legActive = false;
+    gameState.winnerId = player.id;
+  } else {
+    advancePlayer();
+  }
+
   render();
 }
 
@@ -527,9 +582,14 @@ function summarizeTurn(turn) {
 function render() {
   renderScoreboard();
   renderHistory();
+  updateUndoAvailability();
 }
 
 function renderScoreboard() {
+  if (elements.gameSettings) {
+    elements.gameSettings.textContent = `Modus: ${gameState.startingScore} Punkte - ${outModeLabel()}`;
+  }
+
   elements.scoreboard.innerHTML = "";
 
   gameState.players.forEach((player, index) => {
@@ -567,6 +627,67 @@ function renderHistory() {
     `;
     elements.historyLog.appendChild(li);
   });
+}
+
+function outModeLabel(mode = gameState.outMode) {
+  return OUT_MODE_LABELS[mode] || OUT_MODE_LABELS.double;
+}
+
+function requiresDoubleCheckout() {
+  return gameState.outMode === "double";
+}
+
+function initializeDartPicker() {
+  gameState.dartMultiplier = MULTIPLIER_CONFIG[gameState.dartMultiplier] ? gameState.dartMultiplier : 1;
+  updateDartModeButtons();
+  updateDartNumberButtons();
+}
+
+function setDartMultiplier(multiplier) {
+  if (gameState.dartMultiplier === multiplier || !MULTIPLIER_CONFIG[multiplier]) return;
+  gameState.dartMultiplier = multiplier;
+  updateDartModeButtons();
+  updateDartNumberButtons();
+}
+
+function updateDartModeButtons() {
+  elements.dartModeButtons.forEach((button) => {
+    const buttonMultiplier = parseInt(button.dataset.multiplier || "0", 10);
+    const isActive = buttonMultiplier === gameState.dartMultiplier;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function updateDartNumberButtons() {
+  const config = MULTIPLIER_CONFIG[gameState.dartMultiplier] || MULTIPLIER_CONFIG[1];
+
+  elements.dartNumberButtons.forEach((button) => {
+    const base = parseInt(button.dataset.number || "0", 10);
+    const score = base * gameState.dartMultiplier;
+    const disabled = base === 0 && gameState.dartMultiplier !== 1;
+    const label = base === 0 ? "0" : `${config.label} ${base}`;
+
+    button.dataset.label = label;
+    button.dataset.score = String(score);
+    button.dataset.multiplier = String(gameState.dartMultiplier);
+    button.dataset.double = String(config.isDouble && base !== 0);
+    button.disabled = disabled;
+
+    const abbrNode = button.querySelector(".abbr");
+    const valueNode = button.querySelector(".value");
+    if (abbrNode) {
+      abbrNode.textContent = base === 0 ? "0" : `${config.short}${base}`;
+    }
+    if (valueNode) {
+      valueNode.textContent = String(score);
+    }
+  });
+}
+
+function updateUndoAvailability() {
+  if (!elements.undoBtn) return;
+  elements.undoBtn.disabled = gameState.snapshots.length === 0;
 }
 
 // Polyfill for structuredClone in older browsers (primarily for tests)
