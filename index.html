@@ -73,9 +73,11 @@
             <label for="manual-score">Score manueller Wurf</label>
             <input id="manual-score" type="number" min="0" max="180" step="1" />
             <div class="manual-actions">
-              <button id="manual-commit" type="button">Übernehmen</button>
-              <button id="manual-bust" type="button" class="ghost">Bust</button>
-              <button id="undo-btn" type="button" class="ghost">Rückgängig</button>
+              <div class="manual-actions-primary">
+                <button id="manual-commit" type="button">Übernehmen</button>
+                <button id="manual-bust" type="button" class="ghost">Bust</button>
+              </div>
+              <button id="undo-btn" type="button" class="ghost manual-undo">Rückgängig</button>
             </div>
           </div>
           <div class="manual-picker">
@@ -177,11 +179,11 @@
                 </button>
               </div>
               <div class="dart-grid dart-bull">
-                <button class="dart-button" data-label="Single Bull" data-score="25" data-multiplier="1" data-double="false">
+                <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1" data-double="false">
                   <span class="abbr">SB</span>
                   <span class="value">25</span>
                 </button>
-                <button class="dart-button" data-label="Double Bull" data-score="50" data-multiplier="2" data-double="true">
+                <button class="dart-button" data-label="DB" data-readable="Double Bull" data-score="50" data-multiplier="2" data-double="true">
                   <span class="abbr">DB</span>
                   <span class="value">50</span>
                 </button>

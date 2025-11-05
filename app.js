@@ -244,13 +244,14 @@ function onDartPickerClick(event) {
   if (!button || !elements.dartPicker.contains(button) || !gameState.legActive) return;
 
   const label = button.dataset.label || "";
+  const readable = button.dataset.readable || label || button.textContent || "";
   const score = parseInt(button.dataset.score || "0", 10);
   const multiplier = parseInt(button.dataset.multiplier || "1", 10);
   const isDouble = button.dataset.double === "true";
 
   applyDart({
     type: "dart",
-    readable: label,
+    readable,
     dart: {
       label: label || `${score}`,
       score,
@@ -279,7 +280,7 @@ function interpretUtterance(raw) {
   if (dart) {
     return {
       type: "dart",
-      readable: dart.label,
+      readable: dart.readable || dart.label,
       dart,
     };
   }
@@ -347,7 +348,8 @@ function parseDartPhrase(text) {
   if (/bull/.test(text)) {
     const isDoubleBull = /double|doppel/.test(text);
     return {
-      label: isDoubleBull ? "Double Bull" : "Single Bull",
+      label: isDoubleBull ? "DB" : "SB",
+      readable: isDoubleBull ? "Double Bull" : "Single Bull",
       score: isDoubleBull ? 50 : 25,
       isDouble: isDoubleBull,
       multiplier: isDoubleBull ? 2 : 1,
@@ -361,7 +363,8 @@ function parseDartPhrase(text) {
     if (text.includes(keyword)) {
       if (value === 25 || value === 50) {
         return {
-          label: value === 50 ? "Double Bull" : "Single Bull",
+          label: value === 50 ? "DB" : "SB",
+          readable: value === 50 ? "Double Bull" : "Single Bull",
           score: value,
           isDouble: value === 50,
           multiplier: value === 50 ? 2 : 1,
@@ -386,8 +389,10 @@ function parseDartPhrase(text) {
 
   if (!Number.isFinite(base) || base < 0 || base > 20) return null;
   const score = base * multiplier;
-  const label = base === 0 ? "0" : `${multiplierDisplay(multiplier)} ${base}`.trim();
-  return { label, score, isDouble: multiplier === 2, multiplier };
+  const config = MULTIPLIER_CONFIG[multiplier] || MULTIPLIER_CONFIG[1];
+  const label = base === 0 ? "0" : `${config.short}${base}`;
+  const readable = base === 0 ? "0" : `${config.label} ${base}`;
+  return { label, readable, score, isDouble: multiplier === 2, multiplier };
 }
 
 function applyDart(interpretation) {
@@ -401,21 +406,24 @@ function applyDart(interpretation) {
   const dart = interpretation.dart;
   const remaining = player.score - dart.score;
   const requiresDouble = requiresDoubleCheckout();
+  const normalizedDart = normalizeDart(dart);
+  if (!normalizedDart) return;
+  const readableLabel = interpretation.readable || normalizedDart.label;
 
   if (remaining < 0 || (remaining === 0 && requiresDouble && !dart.isDouble)) {
     const reason =
       remaining === 0 && requiresDouble && !dart.isDouble
-        ? `${dart.label} - Double benötigt`
-        : dart.label;
+        ? `${readableLabel} - Double benötigt`
+        : readableLabel;
     registerBust(reason);
     return;
   }
 
   recordSnapshot();
   player.score = remaining;
-  gameState.currentTurn.darts.push(dart);
+  gameState.currentTurn.darts.push(normalizedDart);
   gameState.currentTurn.spoken.push(interpretation.readable);
-  player.lastTurn = dart.label;
+  player.lastTurn = normalizedDart.label;
 
   if (remaining === 0) {
     finishTurn(false, true);
@@ -499,7 +507,7 @@ function pushHistory(turn, player, legWon = false) {
     id: uid(),
     playerId: player.id,
     playerName: player.name,
-    darts: turn.darts.map((dart) => ({ ...dart })),
+    darts: turn.darts.map((dart) => ({ ...dart, label: shortLabelForDart(dart) })),
     spoken: [...turn.spoken],
     bust: turn.bust,
     total,
@@ -575,8 +583,8 @@ function advancePlayer() {
 }
 
 function summarizeTurn(turn) {
-  if (!turn || !turn.darts.length) return "–";
-  return turn.darts.map((dart) => dart.label).join(", ");
+  if (!turn || !turn.darts.length) return "-";
+  return turn.darts.map((dart) => shortLabelForDart(dart)).join(", ");
 }
 
 function render() {
@@ -620,9 +628,10 @@ function renderHistory() {
     const li = document.createElement("li");
     li.className = "history-item";
     if (entry.bust) li.classList.add("bust");
+    const summary = entry.darts.map((dart) => shortLabelForDart(dart)).join(", ") || "-";
     li.innerHTML = `
       <span class="player">${entry.playerName}</span>
-      <span class="summary">${entry.darts.map((dart) => dart.label).join(", ") || "–"}</span>
+      <span class="summary">${summary}</span>
       <span class="remaining">${entry.bust ? "Bust" : `Rest: ${entry.remaining}`}${entry.legWon ? " 🎯" : ""}</span>
     `;
     elements.historyLog.appendChild(li);
@@ -666,9 +675,11 @@ function updateDartNumberButtons() {
     const base = parseInt(button.dataset.number || "0", 10);
     const score = base * gameState.dartMultiplier;
     const disabled = base === 0 && gameState.dartMultiplier !== 1;
-    const label = base === 0 ? "0" : `${config.label} ${base}`;
+    const label = base === 0 ? "0" : `${config.short}${base}`;
+    const readable = base === 0 ? "0" : `${config.label} ${base}`;
 
     button.dataset.label = label;
+    button.dataset.readable = readable;
     button.dataset.score = String(score);
     button.dataset.multiplier = String(gameState.dartMultiplier);
     button.dataset.double = String(config.isDouble && base !== 0);
@@ -677,7 +688,7 @@ function updateDartNumberButtons() {
     const abbrNode = button.querySelector(".abbr");
     const valueNode = button.querySelector(".value");
     if (abbrNode) {
-      abbrNode.textContent = base === 0 ? "0" : `${config.short}${base}`;
+      abbrNode.textContent = label;
     }
     if (valueNode) {
       valueNode.textContent = String(score);
@@ -688,6 +699,55 @@ function updateDartNumberButtons() {
 function updateUndoAvailability() {
   if (!elements.undoBtn) return;
   elements.undoBtn.disabled = gameState.snapshots.length === 0;
+}
+
+function normalizeDart(dart) {
+  if (!dart) return null;
+  const { readable: _ignored, ...rest } = dart;
+  return { ...rest, label: shortLabelForDart(dart) };
+}
+
+function shortLabelForDart(dart) {
+  if (!dart) return "-";
+  const rawLabel = (dart.label || "").trim();
+  const score = Number(dart.score) || 0;
+  const parsedMultiplier = Number(dart.multiplier);
+  const multiplier = Number.isFinite(parsedMultiplier) ? parsedMultiplier : undefined;
+
+  if (score === 0) return "0";
+  if (score === 25 && multiplier === 1) return "SB";
+  if (score === 50 && multiplier === 2) return "DB";
+
+  if (multiplier && MULTIPLIER_CONFIG[multiplier]) {
+    const base = Math.round(score / multiplier);
+    if (Number.isFinite(base) && base >= 0) {
+      if (multiplier === 1) {
+        return `${base}`;
+      }
+      return `${MULTIPLIER_CONFIG[multiplier].short}${base}`;
+    }
+  }
+
+  const doubleMatch = /^double\s+(\d{1,2})$/i.exec(rawLabel);
+  if (doubleMatch) return `D${doubleMatch[1]}`;
+  const tripleMatch = /^triple\s+(\d{1,2})$/i.exec(rawLabel);
+  if (tripleMatch) return `T${tripleMatch[1]}`;
+  const singleMatch = /^single\s+(\d{1,2})$/i.exec(rawLabel);
+  if (singleMatch) return singleMatch[1];
+  const prefixedMatch = /^[SDT](\d{1,2})$/i.exec(rawLabel);
+  if (prefixedMatch) {
+    const prefix = rawLabel[0].toUpperCase();
+    if (prefix === "S") {
+      return prefixedMatch[1];
+    }
+    return `${prefix}${prefixedMatch[1]}`;
+  }
+  if (/^db$/i.test(rawLabel)) return "DB";
+  if (/^sb$/i.test(rawLabel)) return "SB";
+  if (/^double\s+bull$/i.test(rawLabel)) return "DB";
+  if (/^single\s+bull$/i.test(rawLabel)) return "SB";
+
+  return rawLabel || String(score);
 }
 
 // Polyfill for structuredClone in older browsers (primarily for tests)
@@ -703,17 +763,4 @@ function uid() {
     return window.crypto.randomUUID();
   }
   return `id-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-}
-
-function multiplierDisplay(multiplier) {
-  switch (multiplier) {
-    case 1:
-      return "Single";
-    case 2:
-      return "Double";
-    case 3:
-      return "Triple";
-    default:
-      return "";
-  }
 }

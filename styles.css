@@ -262,10 +262,10 @@ button.ghost {
 }
 
 .manual-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(110px, 140px) auto;
-  gap: 0.4rem;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
 }
 
 .manual-row label {
@@ -280,14 +280,25 @@ button.ghost {
 }
 
 .manual-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0.35rem;
-  justify-content: flex-end;
+  width: 100%;
+}
+
+.manual-actions-primary {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
 }
 
 .manual-actions button {
   white-space: nowrap;
+}
+
+.manual-undo {
+  align-self: flex-start;
 }
 
 .manual-picker {
@@ -346,12 +357,12 @@ button.ghost {
 
 .dart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.35rem;
 }
 
 .dart-numbers {
-  grid-template-columns: repeat(3, minmax(70px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .dart-button {
@@ -368,6 +379,7 @@ button.ghost {
   justify-content: center;
   gap: 0.15rem;
   transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  width: 100%;
 }
 
 .dart-button:hover {
