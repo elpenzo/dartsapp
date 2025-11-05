@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "profiles.json");
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "10mb" }));
 
 function ensureDataFile() {
   if (!fs.existsSync(DATA_DIR)) {
