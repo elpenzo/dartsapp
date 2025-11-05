@@ -878,6 +878,96 @@ body:not(.sets-mode) .player-legs-wrapper {
   margin-bottom: 0.25rem;
 }
 
+.profile-heatmap {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.profile-heatmap-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.profile-dartboard {
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.profile-dartboard .board-background {
+  fill: rgba(15, 23, 42, 0.6);
+}
+
+.profile-dartboard .board-outline,
+.profile-dartboard path.board-segment,
+.profile-dartboard .board-bull {
+  stroke: rgba(15, 23, 42, 0.4);
+  stroke-width: 0.6;
+  paint-order: stroke;
+}
+
+.profile-dartboard path.board-segment {
+  transition: fill 0.2s ease;
+}
+
+.profile-dartboard .board-bull {
+  stroke-width: 0.8;
+}
+
+.profile-dartboard .board-outline {
+  fill: none;
+  stroke: rgba(15, 23, 42, 0.4);
+  stroke-width: 1.2;
+}
+
+.heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  justify-content: center;
+}
+
+.heatmap-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.heatmap-legend-item.total {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.heatmap-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.heatmap-swatch.singles {
+  background: rgba(36, 85, 245, 0.7);
+}
+
+.heatmap-swatch.doubles {
+  background: rgba(244, 63, 94, 0.7);
+}
+
+.heatmap-swatch.triples {
+  background: rgba(16, 185, 129, 0.7);
+}
+
+.heatmap-swatch.bulls {
+  background: rgba(253, 224, 71, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.2);
+}
+
 .dart-mode-switch {
   display: inline-flex;
   align-self: flex-start;

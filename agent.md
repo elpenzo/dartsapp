@@ -8,7 +8,7 @@
 
 ## Zielgruppe & Nutzungsszenarien
 - Casual- und Vereinsspieler:innen, die während einer Partie die Hände frei haben wollen.
-- Tablets/Notebooks am Dartboard, ggf. mit zusätzlichem Mikrofon.
+- Tablets/Notebooks am Dartboard, ggf. mit zusätzlichem Mikrofon und Toucheingabe.
 - Einsätze bei Trainings, Ligaspielen oder Events zur schnellen Dokumentation.
 
 ## Projektumfang (MVP)
@@ -124,12 +124,21 @@ function applyDart(gameState, dartResult) {
 
 ## Nächste Schritte
 - Turniermodus
-- Sets
-- best of 3
 - Sprachsteuerung starten per Codewort (Spielername 1,20,Triple 1)
 - Checkout Vorschläge
 - Heatmap pro Spieler
 - Soundeffekte 180
 - Darkmode
 - TastaturEingabe
+- Match- & Turnierverwaltung
+
+Freies Match: Spieler wählbar
+
+Ligamodus: Jeder gegen jeden (Round Robin)
+
+Turniermodus: KO-System oder Gruppenphase mit Finalrunde
+
+Spielplan automatisch erstellen
+
+Historie & Ergebnisse archivieren
 

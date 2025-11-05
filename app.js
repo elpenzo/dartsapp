@@ -151,6 +151,50 @@ async function syncProfilesToServer(currentProfiles) {
   }
 }
 
+function createEmptyHistogram() {
+  const histogram = { SB: 0, DB: 0, MISS: 0 };
+  for (let value = 1; value <= 20; value += 1) {
+    histogram[`S${value}`] = 0;
+    histogram[`D${value}`] = 0;
+    histogram[`T${value}`] = 0;
+  }
+  return histogram;
+}
+
+function cloneHistogram(source) {
+  const clone = createEmptyHistogram();
+  if (!source) return clone;
+  Object.keys(source).forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(clone, key)) {
+      clone[key] = Number(source[key]) || 0;
+    }
+  });
+  return clone;
+}
+
+function histogramKeyForDart(dart) {
+  if (!dart) return null;
+  const multiplier = Number(dart.multiplier) || 1;
+  const score = Number(dart.score) || 0;
+  if (score === 0) return "MISS";
+  if (score === 50 || dart.label === "DB") return "DB";
+  if (score === 25 || dart.label === "SB") return "SB";
+  const base = Math.round(score / multiplier);
+  if (!Number.isFinite(base) || base < 0 || base > 20) return null;
+  const prefix = multiplier === 3 ? "T" : multiplier === 2 ? "D" : "S";
+  return `${prefix}${base}`;
+}
+
+function recordDartHit(player, dart) {
+  if (!player || !dart) return;
+  if (!player.dartHitsThisGame) {
+    player.dartHitsThisGame = createEmptyHistogram();
+  }
+  const key = histogramKeyForDart(dart);
+  if (!key) return;
+  player.dartHitsThisGame[key] = (player.dartHitsThisGame[key] || 0) + 1;
+}
+
 function getCurrentMatchConfig() {
   return (
     gameState.matchConfig ||
@@ -422,6 +466,7 @@ function startGame(
       legsThisSet: 0,
       totalLegsWon: 0,
       setsWon: 0,
+      dartHitsThisGame: createEmptyHistogram(),
     };
   });
   gameState.activeIndex = 0;
@@ -744,6 +789,7 @@ function applyDart(interpretation) {
   gameState.currentTurn.darts.push(normalizedDart);
   gameState.currentTurn.spoken.push(interpretation.readable);
   player.lastTurn = normalizedDart.label;
+  recordDartHit(player, normalizedDart);
 
   if (remaining === 0) {
     finishTurn(false, true);
@@ -872,6 +918,9 @@ function recordSnapshot() {
       legsThisSet: player.legsThisSet || 0,
       totalLegsWon: player.totalLegsWon || 0,
       setsWon: player.setsWon || 0,
+      totalPointsThisGame: player.totalPointsThisGame || 0,
+      totalDartsThisGame: player.totalDartsThisGame || 0,
+      dartHitsThisGame: cloneHistogram(player.dartHitsThisGame),
     })),
     history: structuredClone(gameState.history),
     currentTurn: gameState.currentTurn ? structuredClone(gameState.currentTurn) : null,
@@ -917,6 +966,9 @@ function undoLastTurn() {
       player.legsThisSet = snapshotPlayer.legsThisSet || 0;
       player.totalLegsWon = snapshotPlayer.totalLegsWon || 0;
       player.setsWon = snapshotPlayer.setsWon || 0;
+      player.totalPointsThisGame = snapshotPlayer.totalPointsThisGame || 0;
+      player.totalDartsThisGame = snapshotPlayer.totalDartsThisGame || 0;
+      player.dartHitsThisGame = cloneHistogram(snapshotPlayer.dartHitsThisGame);
     }
   });
   gameState.history = lastSnapshot.history;
@@ -1177,6 +1229,12 @@ function finalizeGameStats() {
     profile.stats.legsWon += player.totalLegsWon || 0;
     const setsWonThisMatch = player.setsWon || (player.id === gameState.winnerId ? 1 : 0);
     profile.stats.setsWon += setsWonThisMatch;
+    profile.stats.dartHistogram = cloneHistogram(profile.stats.dartHistogram);
+    const entryHistogram = cloneHistogram(player.dartHitsThisGame);
+    Object.keys(entryHistogram).forEach((key) => {
+      profile.stats.dartHistogram[key] =
+        (profile.stats.dartHistogram[key] || 0) + (entryHistogram[key] || 0);
+    });
 
     const entry = {
       id: uid(),
@@ -1190,6 +1248,7 @@ function finalizeGameStats() {
       legWon: player.id === gameState.winnerId,
       setsWon: setsWonThisMatch,
       legsWon: player.totalLegsWon || 0,
+      dartHistogram: entryHistogram,
     };
 
     profile.history = profile.history || [];
@@ -1212,6 +1271,7 @@ function finalizeGameStats() {
     player.totalLegsWon = 0;
     player.legsThisSet = 0;
     player.setsWon = 0;
+    player.dartHitsThisGame = createEmptyHistogram();
   });
 
   gameState.statsCommitted = true;
@@ -1656,6 +1716,7 @@ function renderProfileList() {
           }</li>`;
         })
         .join("");
+      const heatmapMarkup = generateProfileHeatmapMarkup(profile);
 
       li.innerHTML = `
         ${avatarMarkup}
@@ -1666,6 +1727,7 @@ function renderProfileList() {
         profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
       }</p>
           ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
+          ${heatmapMarkup}
           <div class="profile-actions-inline">
             <button type="button" class="ghost" data-action="assign" data-slot="1" data-id="${profile.id}">Als Spieler 1 wählen</button>
             <button type="button" class="ghost" data-action="assign" data-slot="2" data-id="${profile.id}">Als Spieler 2 wählen</button>
@@ -1844,6 +1906,154 @@ function renderLeaderboard() {
   elements.leaderboardBody.appendChild(fragment);
 }
 
+const DARTBOARD_NUMBER_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+const HEATMAP_COLORS = {
+  total: [36, 85, 245],
+  double: [244, 63, 94],
+  triple: [16, 185, 129],
+  bull: [253, 224, 71],
+};
+
+function aggregateHistogramData(histogram) {
+  const segments = DARTBOARD_NUMBER_ORDER.map((number) => {
+    const single = Number(histogram?.[`S${number}`]) || 0;
+    const double = Number(histogram?.[`D${number}`]) || 0;
+    const triple = Number(histogram?.[`T${number}`]) || 0;
+    return {
+      number,
+      single,
+      double,
+      triple,
+      total: single + double + triple,
+    };
+  });
+
+  const bulls = {
+    single: Number(histogram?.SB) || 0,
+    double: Number(histogram?.DB) || 0,
+    total: (Number(histogram?.SB) || 0) + (Number(histogram?.DB) || 0),
+  };
+
+  const totalHits =
+    segments.reduce((sum, segment) => sum + segment.total, 0) + bulls.single + bulls.double;
+
+  return {
+    segments,
+    bulls,
+    totalHits,
+    maxSingle: Math.max(...segments.map((segment) => segment.single), 0) || 1,
+    maxDouble: Math.max(...segments.map((segment) => segment.double), 0) || 1,
+    maxTriple: Math.max(...segments.map((segment) => segment.triple), 0) || 1,
+    maxTotal: Math.max(...segments.map((segment) => segment.total), 0) || 1,
+    maxBullSingle: Math.max(bulls.single, 0) || 1,
+    maxBullDouble: Math.max(bulls.double, 0) || 1,
+  };
+}
+
+function heatColor(ratio, [r, g, b]) {
+  const clamped = Math.max(0, Math.min(1, ratio));
+  const alpha = clamped === 0 ? 0.06 : 0.18 + clamped * 0.72;
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
+}
+
+function polarCoordinate(radius, angle, center) {
+  return `${center + radius * Math.cos(angle)},${center + radius * Math.sin(angle)}`;
+}
+
+function ringPath(innerRadius, outerRadius, startAngle, endAngle, center) {
+  const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
+  const outerStart = polarCoordinate(outerRadius, startAngle, center);
+  const outerEnd = polarCoordinate(outerRadius, endAngle, center);
+  const innerEnd = polarCoordinate(innerRadius, endAngle, center);
+  const innerStart = polarCoordinate(innerRadius, startAngle, center);
+  return `M ${outerStart} A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${outerEnd} L ${innerEnd} A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerStart} Z`;
+}
+
+function generateProfileHeatmapMarkup(profile) {
+  const histogram = profile?.stats?.dartHistogram;
+  if (!histogram) return "";
+
+  const data = aggregateHistogramData(histogram);
+  if (!data.totalHits) return "";
+
+  const center = 120;
+  const segmentAngle = (Math.PI * 2) / DARTBOARD_NUMBER_ORDER.length;
+  const baseAngle = -Math.PI / 2;
+
+  const singleOuterInner = 74;
+  const singleOuterOuter = 108;
+  const singleInnerInner = 34;
+  const singleInnerOuter = 58;
+  const tripleInner = 58;
+  const tripleOuter = 74;
+  const doubleInner = 108;
+  const doubleOuter = 118;
+
+  const segmentsMarkup = [];
+
+  data.segments.forEach((segment, index) => {
+    const start = baseAngle + index * segmentAngle;
+    const end = start + segmentAngle;
+
+    const totalRatio = segment.total / data.maxTotal;
+    const doubleRatio = segment.double / data.maxDouble;
+    const tripleRatio = segment.triple / data.maxTriple;
+
+    const singleColor = heatColor(totalRatio, HEATMAP_COLORS.total);
+    const doubleColor = heatColor(doubleRatio, HEATMAP_COLORS.double);
+    const tripleColor = heatColor(tripleRatio, HEATMAP_COLORS.triple);
+
+    const outerSinglePath = ringPath(singleOuterInner, singleOuterOuter, start, end, center);
+    const innerSinglePath = ringPath(singleInnerInner, singleInnerOuter, start, end, center);
+    const triplePath = ringPath(tripleInner, tripleOuter, start, end, center);
+    const doublePath = ringPath(doubleInner, doubleOuter, start, end, center);
+
+    segmentsMarkup.push(
+      `<path class="board-segment single" data-number="${segment.number}" fill="${singleColor}" d="${outerSinglePath}" />`
+    );
+    segmentsMarkup.push(
+      `<path class="board-segment single" data-number="${segment.number}" fill="${singleColor}" d="${innerSinglePath}" />`
+    );
+    segmentsMarkup.push(
+      `<path class="board-segment triple" data-number="${segment.number}" fill="${tripleColor}" d="${triplePath}" />`
+    );
+    segmentsMarkup.push(
+      `<path class="board-segment double" data-number="${segment.number}" fill="${doubleColor}" d="${doublePath}" />`
+    );
+  });
+
+  const singleBullColor = heatColor(data.bulls.single / data.maxBullSingle, HEATMAP_COLORS.total);
+  const doubleBullColor = heatColor(data.bulls.double / data.maxBullDouble, HEATMAP_COLORS.bull);
+
+  const svgMarkup = `
+    <svg class="profile-dartboard" viewBox="0 0 240 240" role="img" aria-label="Heatmap der Wurftreffer">
+      <circle class="board-background" cx="${center}" cy="${center}" r="118" />
+      ${segmentsMarkup.join("\n")}
+      <circle class="board-bull sb" cx="${center}" cy="${center}" r="16" fill="${singleBullColor}" />
+      <circle class="board-bull db" cx="${center}" cy="${center}" r="6" fill="${doubleBullColor}" />
+      <circle class="board-outline" cx="${center}" cy="${center}" r="118" />
+    </svg>
+  `;
+
+  const legendMarkup = `
+    <div class="heatmap-legend">
+      <span class="heatmap-legend-item"><span class="heatmap-swatch singles"></span>Singles</span>
+      <span class="heatmap-legend-item"><span class="heatmap-swatch doubles"></span>Doubles</span>
+      <span class="heatmap-legend-item"><span class="heatmap-swatch triples"></span>Triples</span>
+      <span class="heatmap-legend-item"><span class="heatmap-swatch bulls"></span>Bull</span>
+      <span class="heatmap-legend-item total">Treffer insgesamt: ${data.totalHits}</span>
+    </div>
+  `;
+
+  return `
+    <div class="profile-heatmap">
+      <span class="profile-heatmap-title">Trefferheatmap</span>
+      ${svgMarkup}
+      ${legendMarkup}
+    </div>
+  `;
+}
+
 function ensureProfileStats(profile) {
   profile.stats = profile.stats || {};
   profile.stats.gamesPlayed = profile.stats.gamesPlayed || 0;
@@ -1851,6 +2061,7 @@ function ensureProfileStats(profile) {
   profile.stats.setsWon = profile.stats.setsWon || 0;
   profile.stats.totalPoints = profile.stats.totalPoints || 0;
   profile.stats.totalDarts = profile.stats.totalDarts || 0;
+  profile.stats.dartHistogram = cloneHistogram(profile.stats.dartHistogram);
   profile.history = profile.history || [];
 }
 
