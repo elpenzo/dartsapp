@@ -10,13 +10,13 @@
 
 <body>
   <header class="app-header">
-    <h1>Darts Voice Prototype</h1>
+    <h1>friendDartBoard</h1>
     <p class="tagline">Sprich deine Würfe - die App protokolliert das Leg.</p>
-      <div class="view-toggle" role="group" aria-label="Ansicht wählen">
-        <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
-        <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
-        <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
-      </div>
+    <div class="view-toggle" role="group" aria-label="Ansicht wählen">
+      <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
+      <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+      <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
+    </div>
   </header>
 
   <main class="app-main">
@@ -31,14 +31,7 @@
         </div>
         <div class="form-row">
           <label for="player-one">Spieler 1 Name</label>
-          <input
-            id="player-one"
-            name="playerOne"
-            type="text"
-            value="Player 1"
-            autocomplete="off"
-            required
-          />
+          <input id="player-one" name="playerOne" type="text" value="Player 1" autocomplete="off" required />
         </div>
         <div class="form-row">
           <label for="player-two-profile">Spieler 2 Profil</label>
@@ -48,14 +41,7 @@
         </div>
         <div class="form-row">
           <label for="player-two">Spieler 2 Name</label>
-          <input
-            id="player-two"
-            name="playerTwo"
-            type="text"
-            value="Player 2"
-            autocomplete="off"
-            required
-          />
+          <input id="player-two" name="playerTwo" type="text" value="Player 2" autocomplete="off" required />
         </div>
         <div class="form-row">
           <label for="starting-score">Startscore</label>
@@ -271,7 +257,7 @@
   </main>
 
   <footer class="app-footer">
-    <p>Prototyp – keine Persistenz, optimiert für Chromium-Browser mit Web Speech API.</p>
+    <p>(❁´◡`❁) powered by penze</p>
   </footer>
 
   <template id="scoreboard-item-template">
