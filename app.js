@@ -87,7 +87,9 @@ function initialize() {
     }
   });
   elements.manualBustBtn.addEventListener("click", () => registerBust("Manuelle Eingabe"));
-  setupDartPicker();
+  if (elements.dartPicker) {
+    elements.dartPicker.addEventListener("click", onDartPickerClick);
+  }
 
   if (!speechEngine.supported) {
     elements.voiceStatus.textContent = "Nicht unterstützt";
@@ -198,123 +200,23 @@ function notifyVoiceStatus(status, label) {
   elements.voiceStatus.textContent = label;
 }
 
-function setupDartPicker() {
-  if (!elements.dartPicker) return;
-  const groups = [
-    {
-      key: "single",
-      title: "Single (0–20)",
-      multiplier: 1,
-      values: Array.from({ length: 21 }, (_, index) => index),
-    },
-    {
-      key: "double",
-      title: "Double (1–20)",
-      multiplier: 2,
-      values: Array.from({ length: 20 }, (_, index) => index + 1),
-    },
-    {
-      key: "triple",
-      title: "Triple (1–20)",
-      multiplier: 3,
-      values: Array.from({ length: 20 }, (_, index) => index + 1),
-    },
-    {
-      key: "bull",
-      title: "Bull",
-      entries: [
-        {
-          label: "Single Bull",
-          displayLabel: "SB",
-          score: 25,
-          isDouble: false,
-          multiplier: 1,
-          readable: "Single Bull (25)",
-        },
-        {
-          label: "Double Bull",
-          displayLabel: "DB",
-          score: 50,
-          isDouble: true,
-          multiplier: 2,
-          readable: "Double Bull (50)",
-        },
-      ],
-    },
-  ];
+function onDartPickerClick(event) {
+  const button = event.target.closest(".dart-button");
+  if (!button || !elements.dartPicker.contains(button) || !gameState.legActive) return;
 
-  elements.dartPicker.innerHTML = "";
+  const label = button.dataset.label || "";
+  const score = parseInt(button.dataset.score || "0", 10);
+  const multiplier = parseInt(button.dataset.multiplier || "1", 10);
+  const isDouble = button.dataset.double === "true";
 
-  groups.forEach((group) => {
-    const section = document.createElement("section");
-    section.className = `dart-group ${group.key}`;
-
-    const heading = document.createElement("h5");
-    heading.textContent = group.title;
-    section.appendChild(heading);
-
-    const grid = document.createElement("div");
-    grid.className = "dart-grid";
-    section.appendChild(grid);
-
-    if (group.entries) {
-      group.entries.forEach((entry) => {
-        const button = createDartButton(entry);
-        grid.appendChild(button);
-      });
-    } else {
-      group.values.forEach((value) => {
-        const definition = createNumericDartDefinition(group.multiplier, value);
-        const button = createDartButton(definition);
-        grid.appendChild(button);
-      });
-    }
-
-    elements.dartPicker.appendChild(section);
-  });
-}
-
-function createNumericDartDefinition(multiplier, value) {
-  const total = value * multiplier;
-  const prefix = multiplierPrefix(multiplier);
-  const displayLabel = value === 0 ? "0" : `${prefix}${value}`;
-  const label =
-    value === 0 ? "0" : `${multiplierDisplay(multiplier)} ${value}`.trim();
-
-  return {
-    label,
-    displayLabel,
-    score: total,
-    isDouble: multiplier === 2 && value !== 0,
-    multiplier,
-    readable: value === 0 ? "0" : `${label} (${total})`,
-  };
-}
-
-function createDartButton(definition) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "dart-button";
-  const valueLabel = definition.readable || `${definition.label} (${definition.score})`;
-  button.innerHTML = `
-    <span>${definition.displayLabel || definition.label}</span>
-    <span class="value">${definition.score}</span>
-  `;
-  button.title = valueLabel;
-  button.addEventListener("click", () => handleDartClick(definition));
-  return button;
-}
-
-function handleDartClick(definition) {
-  if (!gameState.legActive) return;
   applyDart({
     type: "dart",
-    readable: definition.readable || definition.label,
+    readable: label,
     dart: {
-      label: definition.label,
-      score: definition.score,
-      isDouble: Boolean(definition.isDouble),
-      multiplier: definition.multiplier || 1,
+      label: label || `${score}`,
+      score,
+      isDouble,
+      multiplier,
     },
   });
 }
@@ -690,19 +592,6 @@ function multiplierDisplay(multiplier) {
       return "Double";
     case 3:
       return "Triple";
-    default:
-      return "";
-  }
-}
-
-function multiplierPrefix(multiplier) {
-  switch (multiplier) {
-    case 1:
-      return "S";
-    case 2:
-      return "D";
-    case 3:
-      return "T";
     default:
       return "";
   }
