@@ -1,4 +1,14 @@
 {
+  "name": "dartsapp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "serve:static": "serve ."
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
   "devDependencies": {
     "serve": "^14.2.5"
   }

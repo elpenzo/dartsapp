@@ -75,6 +75,56 @@ const gameState = {
 
 let profiles = [];
 let pendingProfileImage = null;
+const PROFILES_API_URL = "/api/profiles";
+let pendingServerSync = null;
+let serverSyncDisabled = false;
+
+async function fetchProfilesFromServer() {
+  if (typeof fetch !== "function") return null;
+  try {
+    const response = await fetch(PROFILES_API_URL, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Serverantwort ${response.status}`);
+    }
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      serverSyncDisabled = false;
+      return data;
+    }
+  } catch (error) {
+    console.warn("Profile konnten nicht vom Server geladen werden:", error);
+  }
+  return null;
+}
+
+function scheduleProfileSync() {
+  if (serverSyncDisabled || typeof fetch !== "function") return;
+  if (pendingServerSync) {
+    clearTimeout(pendingServerSync);
+  }
+  pendingServerSync = setTimeout(() => {
+    pendingServerSync = null;
+    syncProfilesToServer(profiles);
+  }, 300);
+}
+
+async function syncProfilesToServer(currentProfiles) {
+  if (serverSyncDisabled || typeof fetch !== "function") return;
+  try {
+    const response = await fetch(PROFILES_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profiles: currentProfiles }),
+    });
+    if (!response.ok) {
+      throw new Error(`Serverantwort ${response.status}`);
+    }
+    serverSyncDisabled = false;
+  } catch (error) {
+    console.warn("Profile konnten nicht zum Server synchronisiert werden:", error);
+    serverSyncDisabled = true;
+  }
+}
 
 class SpeechEngine {
   constructor(onUtterance, onState) {
@@ -119,9 +169,11 @@ class SpeechEngine {
 
 const speechEngine = new SpeechEngine(handleUtterance, handleSpeechState);
 
-initialize();
+initialize().catch((error) => {
+  console.error("Fehler bei der Initialisierung:", error);
+});
 
-function initialize() {
+async function initialize() {
   elements.setupForm.addEventListener("submit", onSetupSubmit);
   elements.resetBtn.addEventListener("click", () => resetGame());
   elements.listenBtn.addEventListener("click", () => speechEngine.start());
@@ -182,7 +234,7 @@ function initialize() {
     elements.profileList.addEventListener("click", onProfileListClick);
   }
 
-  loadProfiles();
+  await loadProfiles();
   handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
   handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
   renderLeaderboard();
@@ -1289,21 +1341,37 @@ function assignProfileToSlot(profileId, slot) {
   setViewMode("setup");
 }
 
-function loadProfiles() {
-  try {
-    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        profiles = parsed.map((profile) => {
-          ensureProfileStats(profile);
-          return profile;
-        });
-      }
+async function loadProfiles() {
+  let sourceProfiles = null;
+
+  const serverProfiles = await fetchProfilesFromServer();
+  if (serverProfiles !== null) {
+    sourceProfiles = serverProfiles;
+    try {
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(serverProfiles));
+    } catch (error) {
+      console.warn("Profile konnten nicht lokal gespeichert werden:", error);
     }
-  } catch (error) {
-    profiles = [];
+  } else {
+    try {
+      const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          sourceProfiles = parsed;
+        }
+      }
+    } catch (error) {
+      console.warn("Profile konnten nicht aus dem lokalen Speicher geladen werden:", error);
+    }
   }
+
+  profiles = Array.isArray(sourceProfiles)
+    ? sourceProfiles.map((profile) => {
+        ensureProfileStats(profile);
+        return profile;
+      })
+    : [];
 
   renderProfileOptions();
   renderProfileList();
@@ -1315,6 +1383,7 @@ function saveProfiles() {
   } catch (error) {
     console.error("Profile konnten nicht gespeichert werden", error);
   }
+  scheduleProfileSync();
 }
 
 function renderProfileOptions() {

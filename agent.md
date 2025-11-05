@@ -123,7 +123,8 @@ function applyDart(gameState, dartResult) {
 - Online-Multiplayer mit WebRTC + Voice Rooms.
 
 ## Nächste Schritte
-- Mockups erstellen (Figma/Whimsical) basierend auf Wireframe.
-- User-Interviews (aktive Spieler:innen) zur Feinkonzeption der Sprachbefehle.
-- Proof-of-Concept für Sprachbefehle im Zielbrowser.
+- Turniermodus
+- Sets
+- best of 3
+- Sprachsteuerung starten per Codewort (Spielername 1,20,Triple 1)
 
