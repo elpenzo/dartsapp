@@ -1,232 +1,237 @@
 <!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Darts Voice Prototype</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <header class="app-header">
-      <h1>Darts Voice Prototype</h1>
-      <p class="tagline">Sprich deine Würfe - die App protokolliert das Leg.</p>
-      <div class="view-toggle" role="group" aria-label="Ansicht wählen">
-        <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
-        <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Darts Voice Prototype</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <header class="app-header">
+    <h1>Darts Voice Prototype</h1>
+    <p class="tagline">Sprich deine Würfe - die App protokolliert das Leg.</p>
+    <div class="view-toggle" role="group" aria-label="Ansicht wählen">
+      <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
+      <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section class="card setup-card" aria-labelledby="setup-title">
+      <h2 id="setup-title">Spiel konfigurieren</h2>
+      <form id="setup-form" class="setup-form">
+        <div class="form-row">
+          <label for="player-one">Spieler 1</label>
+          <input id="player-one" name="playerOne" type="text" value="Player 1" required />
+        </div>
+        <div class="form-row">
+          <label for="player-two">Spieler 2</label>
+          <input id="player-two" name="playerTwo" type="text" value="Player 2" required />
+        </div>
+        <div class="form-row">
+          <label for="starting-score">Startscore</label>
+          <select id="starting-score" name="startingScore">
+            <option value="501" selected>501</option>
+            <option value="301">301</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="out-mode">Checkout-Regel</label>
+          <select id="out-mode" name="outMode">
+            <option value="single" selected>Single Out</option>
+            <option value="double">Double Out</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="primary">Leg starten</button>
+          <button type="button" id="reset-btn" class="ghost">Zurücksetzen</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card scoreboard" aria-labelledby="scoreboard-title">
+      <h2 id="scoreboard-title">Scoreboard</h2>
+      <p id="game-settings" class="game-meta" aria-live="polite"></p>
+      <p id="active-player-banner" class="active-player-banner" aria-live="assertive"></p>
+      <div id="scoreboard" class="scoreboard-grid" aria-live="polite"></div>
+      <section class="scoreboard-quick" aria-labelledby="quick-select-title">
+        <h3 id="quick-select-title">Schnellauswahl</h3>
+        <div class="dart-combos" aria-label="Standardfolgen">
+          <button type="button" class="combo-button" data-combo="1-20-5">1 • 20 • 5</button>
+          <button type="button" class="combo-button" data-combo="3-19-7">3 • 19 • 7</button>
+        </div>
+        <div class="dart-mode-switch" role="group" aria-label="Multiplikator wählen">
+          <button type="button" class="dart-mode-button active" data-multiplier="1">Single</button>
+          <button type="button" class="dart-mode-button" data-multiplier="2">Double</button>
+          <button type="button" class="dart-mode-button" data-multiplier="3">Triple</button>
+        </div>
+        <div id="dart-picker" class="dart-picker" aria-label="Dart-Schnellauswahl für Single, Double, Triple und Bull">
+          <div class="dart-grid dart-numbers">
+            <button class="dart-button dart-number" data-number="0">
+              <span class="abbr">S0</span>
+              <span class="value">0</span>
+            </button>
+            <button class="dart-button dart-number" data-number="1">
+              <span class="abbr">S1</span>
+              <span class="value">1</span>
+            </button>
+            <button class="dart-button dart-number" data-number="2">
+              <span class="abbr">S2</span>
+              <span class="value">2</span>
+            </button>
+            <button class="dart-button dart-number" data-number="3">
+              <span class="abbr">S3</span>
+              <span class="value">3</span>
+            </button>
+            <button class="dart-button dart-number" data-number="4">
+              <span class="abbr">S4</span>
+              <span class="value">4</span>
+            </button>
+            <button class="dart-button dart-number" data-number="5">
+              <span class="abbr">S5</span>
+              <span class="value">5</span>
+            </button>
+            <button class="dart-button dart-number" data-number="6">
+              <span class="abbr">S6</span>
+              <span class="value">6</span>
+            </button>
+            <button class="dart-button dart-number" data-number="7">
+              <span class="abbr">S7</span>
+              <span class="value">7</span>
+            </button>
+            <button class="dart-button dart-number" data-number="8">
+              <span class="abbr">S8</span>
+              <span class="value">8</span>
+            </button>
+            <button class="dart-button dart-number" data-number="9">
+              <span class="abbr">S9</span>
+              <span class="value">9</span>
+            </button>
+            <button class="dart-button dart-number" data-number="10">
+              <span class="abbr">S10</span>
+              <span class="value">10</span>
+            </button>
+            <button class="dart-button dart-number" data-number="11">
+              <span class="abbr">S11</span>
+              <span class="value">11</span>
+            </button>
+            <button class="dart-button dart-number" data-number="12">
+              <span class="abbr">S12</span>
+              <span class="value">12</span>
+            </button>
+            <button class="dart-button dart-number" data-number="13">
+              <span class="abbr">S13</span>
+              <span class="value">13</span>
+            </button>
+            <button class="dart-button dart-number" data-number="14">
+              <span class="abbr">S14</span>
+              <span class="value">14</span>
+            </button>
+            <button class="dart-button dart-number" data-number="15">
+              <span class="abbr">S15</span>
+              <span class="value">15</span>
+            </button>
+            <button class="dart-button dart-number" data-number="16">
+              <span class="abbr">S16</span>
+              <span class="value">16</span>
+            </button>
+            <button class="dart-button dart-number" data-number="17">
+              <span class="abbr">S17</span>
+              <span class="value">17</span>
+            </button>
+            <button class="dart-button dart-number" data-number="18">
+              <span class="abbr">S18</span>
+              <span class="value">18</span>
+            </button>
+            <button class="dart-button dart-number" data-number="19">
+              <span class="abbr">S19</span>
+              <span class="value">19</span>
+            </button>
+            <button class="dart-button dart-number" data-number="20">
+              <span class="abbr">S20</span>
+              <span class="value">20</span>
+            </button>
+          </div>
+          <div class="dart-grid dart-bull">
+            <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1"
+              data-double="false">
+              <span class="abbr">SB</span>
+              <span class="value">25</span>
+            </button>
+            <button class="dart-button" data-label="DB" data-readable="Double Bull" data-score="50" data-multiplier="2"
+              data-double="true">
+              <span class="abbr">DB</span>
+              <span class="value">50</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="card voice-console" aria-labelledby="voice-title">
+      <div class="voice-header">
+        <h2 id="voice-title">Sprachsteuerung</h2>
+        <span id="voice-status" class="status offline">Inaktiv</span>
       </div>
-    </header>
-
-    <main class="app-main">
-      <section class="card setup-card" aria-labelledby="setup-title">
-        <h2 id="setup-title">Spiel konfigurieren</h2>
-        <form id="setup-form" class="setup-form">
-          <div class="form-row">
-            <label for="player-one">Spieler 1</label>
-            <input id="player-one" name="playerOne" type="text" value="Player 1" required />
-          </div>
-          <div class="form-row">
-            <label for="player-two">Spieler 2</label>
-            <input id="player-two" name="playerTwo" type="text" value="Player 2" required />
-          </div>
-          <div class="form-row">
-            <label for="starting-score">Startscore</label>
-            <select id="starting-score" name="startingScore">
-              <option value="501" selected>501</option>
-              <option value="301">301</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="out-mode">Checkout-Regel</label>
-            <select id="out-mode" name="outMode">
-              <option value="double" selected>Double Out</option>
-              <option value="single">Single Out</option>
-            </select>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="primary">Leg starten</button>
-            <button type="button" id="reset-btn" class="ghost">Zurücksetzen</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="card scoreboard" aria-labelledby="scoreboard-title">
-        <h2 id="scoreboard-title">Scoreboard</h2>
-        <p id="game-settings" class="game-meta" aria-live="polite"></p>
-        <p id="active-player-banner" class="active-player-banner" aria-live="assertive"></p>
-        <div id="scoreboard" class="scoreboard-grid" aria-live="polite"></div>
-        <section class="scoreboard-quick" aria-labelledby="quick-select-title">
-          <h3 id="quick-select-title">Schnellauswahl</h3>
-          <div class="dart-mode-switch" role="group" aria-label="Multiplikator wählen">
-            <button type="button" class="dart-mode-button active" data-multiplier="1">Single</button>
-            <button type="button" class="dart-mode-button" data-multiplier="2">Double</button>
-            <button type="button" class="dart-mode-button" data-multiplier="3">Triple</button>
-          </div>
-          <div
-            id="dart-picker"
-            class="dart-picker"
-            aria-label="Dart-Schnellauswahl für Single, Double, Triple und Bull"
-          >
-            <div class="dart-grid dart-numbers">
-              <button class="dart-button dart-number" data-number="0">
-                <span class="abbr">S0</span>
-                <span class="value">0</span>
-              </button>
-              <button class="dart-button dart-number" data-number="1">
-                <span class="abbr">S1</span>
-                <span class="value">1</span>
-              </button>
-              <button class="dart-button dart-number" data-number="2">
-                <span class="abbr">S2</span>
-                <span class="value">2</span>
-              </button>
-              <button class="dart-button dart-number" data-number="3">
-                <span class="abbr">S3</span>
-                <span class="value">3</span>
-              </button>
-              <button class="dart-button dart-number" data-number="4">
-                <span class="abbr">S4</span>
-                <span class="value">4</span>
-              </button>
-              <button class="dart-button dart-number" data-number="5">
-                <span class="abbr">S5</span>
-                <span class="value">5</span>
-              </button>
-              <button class="dart-button dart-number" data-number="6">
-                <span class="abbr">S6</span>
-                <span class="value">6</span>
-              </button>
-              <button class="dart-button dart-number" data-number="7">
-                <span class="abbr">S7</span>
-                <span class="value">7</span>
-              </button>
-              <button class="dart-button dart-number" data-number="8">
-                <span class="abbr">S8</span>
-                <span class="value">8</span>
-              </button>
-              <button class="dart-button dart-number" data-number="9">
-                <span class="abbr">S9</span>
-                <span class="value">9</span>
-              </button>
-              <button class="dart-button dart-number" data-number="10">
-                <span class="abbr">S10</span>
-                <span class="value">10</span>
-              </button>
-              <button class="dart-button dart-number" data-number="11">
-                <span class="abbr">S11</span>
-                <span class="value">11</span>
-              </button>
-              <button class="dart-button dart-number" data-number="12">
-                <span class="abbr">S12</span>
-                <span class="value">12</span>
-              </button>
-              <button class="dart-button dart-number" data-number="13">
-                <span class="abbr">S13</span>
-                <span class="value">13</span>
-              </button>
-              <button class="dart-button dart-number" data-number="14">
-                <span class="abbr">S14</span>
-                <span class="value">14</span>
-              </button>
-              <button class="dart-button dart-number" data-number="15">
-                <span class="abbr">S15</span>
-                <span class="value">15</span>
-              </button>
-              <button class="dart-button dart-number" data-number="16">
-                <span class="abbr">S16</span>
-                <span class="value">16</span>
-              </button>
-              <button class="dart-button dart-number" data-number="17">
-                <span class="abbr">S17</span>
-                <span class="value">17</span>
-              </button>
-              <button class="dart-button dart-number" data-number="18">
-                <span class="abbr">S18</span>
-                <span class="value">18</span>
-              </button>
-              <button class="dart-button dart-number" data-number="19">
-                <span class="abbr">S19</span>
-                <span class="value">19</span>
-              </button>
-              <button class="dart-button dart-number" data-number="20">
-                <span class="abbr">S20</span>
-                <span class="value">20</span>
-              </button>
+      <p class="voice-tip">
+        Beispiele: „Triple 20“, „140“, „Double 16“, „Bust“, „Neuer Wurf“, „Rückgängig“.
+      </p>
+      <div class="voice-controls">
+        <button id="listen-btn" class="primary" type="button">Aufnahme starten</button>
+        <button id="stop-listen-btn" class="ghost" type="button">Aufnahme stoppen</button>
+      </div>
+      <div class="voice-readout" aria-live="assertive">
+        <p><strong>Letzte Erkennung:</strong> <span id="last-utterance">–</span></p>
+        <p><strong>Interpretation:</strong> <span id="last-interpretation">–</span></p>
+      </div>
+      <div class="fallback-manual">
+        <h3>Fallback</h3>
+        <div class="manual-row">
+          <label for="manual-score">Score manueller Wurf</label>
+          <input id="manual-score" type="number" min="0" max="180" step="1" />
+          <div class="manual-actions">
+            <div class="manual-actions-primary">
+              <button id="manual-commit" type="button">Übernehmen</button>
+              <button id="manual-bust" type="button" class="ghost">Bust</button>
             </div>
-            <div class="dart-grid dart-bull">
-              <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1" data-double="false">
-                <span class="abbr">SB</span>
-                <span class="value">25</span>
-              </button>
-              <button class="dart-button" data-label="DB" data-readable="Double Bull" data-score="50" data-multiplier="2" data-double="true">
-                <span class="abbr">DB</span>
-                <span class="value">50</span>
-              </button>
-            </div>
-          </div>
-        </section>
-      </section>
-
-      <section class="card voice-console" aria-labelledby="voice-title">
-        <div class="voice-header">
-          <h2 id="voice-title">Sprachsteuerung</h2>
-          <span id="voice-status" class="status offline">Inaktiv</span>
-        </div>
-        <p class="voice-tip">
-          Beispiele: „Triple 20“, „140“, „Double 16“, „Bust“, „Neuer Wurf“, „Rückgängig“.
-        </p>
-        <div class="voice-controls">
-          <button id="listen-btn" class="primary" type="button">Aufnahme starten</button>
-          <button id="stop-listen-btn" class="ghost" type="button">Aufnahme stoppen</button>
-        </div>
-        <div class="voice-readout" aria-live="assertive">
-          <p><strong>Letzte Erkennung:</strong> <span id="last-utterance">–</span></p>
-          <p><strong>Interpretation:</strong> <span id="last-interpretation">–</span></p>
-        </div>
-        <div class="fallback-manual">
-          <h3>Fallback</h3>
-          <div class="manual-row">
-            <label for="manual-score">Score manueller Wurf</label>
-            <input id="manual-score" type="number" min="0" max="180" step="1" />
-            <div class="manual-actions">
-              <div class="manual-actions-primary">
-                <button id="manual-commit" type="button">Übernehmen</button>
-                <button id="manual-bust" type="button" class="ghost">Bust</button>
-              </div>
-              <button id="undo-btn" type="button" class="ghost manual-undo">Rückgängig</button>
-            </div>
+            <button id="undo-btn" type="button" class="ghost manual-undo">Rückgängig</button>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section class="card history" aria-labelledby="history-title">
-        <h2 id="history-title">Verlauf</h2>
-        <ul id="history-log" class="history-log"></ul>
-      </section>
-    </main>
+    <section class="card history" aria-labelledby="history-title">
+      <h2 id="history-title">Verlauf</h2>
+      <ul id="history-log" class="history-log"></ul>
+    </section>
+  </main>
 
-    <footer class="app-footer">
-      <p>Prototyp – keine Persistenz, optimiert für Chromium-Browser mit Web Speech API.</p>
-    </footer>
+  <footer class="app-footer">
+    <p>Prototyp – keine Persistenz, optimiert für Chromium-Browser mit Web Speech API.</p>
+  </footer>
 
-    <template id="scoreboard-item-template">
-      <article class="player-card">
-        <header>
-          <h3 class="player-name"></h3>
-          <span class="player-indicator" aria-hidden="true">●</span>
-        </header>
-        <dl class="player-stats">
-          <div>
-            <dt>Rest</dt>
-            <dd class="player-score">501</dd>
-          </div>
-          <div>
-            <dt>Letzter Wurf</dt>
-            <dd class="player-last">–</dd>
-          </div>
-        </dl>
-      </article>
-    </template>
+  <template id="scoreboard-item-template">
+    <article class="player-card">
+      <header>
+        <h3 class="player-name"></h3>
+        <span class="player-indicator" aria-hidden="true">●</span>
+      </header>
+      <dl class="player-stats">
+        <div>
+          <dt>Rest</dt>
+          <dd class="player-score">501</dd>
+        </div>
+        <div>
+          <dt>Letzter Wurf</dt>
+          <dd class="player-last">–</dd>
+        </div>
+      </dl>
+    </article>
+  </template>
 
-    <script src="app.js" type="module"></script>
-  </body>
+  <script src="app.js" type="module"></script>
+</body>
+
 </html>

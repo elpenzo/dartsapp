@@ -1,5 +1,5 @@
 const DEFAULT_STARTING_SCORE = 501;
-const DEFAULT_OUT_MODE = "double";
+const DEFAULT_OUT_MODE = "single";
 const MAX_DARTS_PER_TURN = 3;
 const MULTIPLIER_CONFIG = {
   1: { label: "Single", short: "S", isDouble: false },
@@ -35,6 +35,7 @@ const elements = {
   dartModeSwitch: document.querySelector(".dart-mode-switch"),
   dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
   dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
+  comboButtons: Array.from(document.querySelectorAll(".combo-button")),
   viewToggleButtons: Array.from(document.querySelectorAll(".view-toggle-btn")),
 };
 
@@ -124,6 +125,11 @@ function initialize() {
   }
   if (elements.dartModeSwitch) {
     elements.dartModeSwitch.addEventListener("click", onDartModeClick);
+  }
+  if (elements.comboButtons.length) {
+    elements.comboButtons.forEach((button) => {
+      button.addEventListener("click", () => applyCombo(button.dataset.combo));
+    });
   }
 
   updateViewModeUI();
@@ -714,6 +720,33 @@ function updateUndoAvailability() {
   elements.undoBtn.disabled = gameState.snapshots.length === 0;
 }
 
+function applyCombo(sequence) {
+  if (!sequence || !gameState.legActive) return;
+  const tokens = sequence.split(/[-,]/).map((token) => token.trim()).filter(Boolean);
+  if (!tokens.length) return;
+
+  const startingPlayerId = gameState.players[gameState.activeIndex]?.id;
+  if (!startingPlayerId) return;
+
+  for (const token of tokens) {
+    if (!gameState.legActive) break;
+
+    const dart = dartFromToken(token);
+    if (!dart) continue;
+
+    const readable = dart.readable || dart.label;
+    applyDart({ type: "dart", readable, dart });
+
+    const currentPlayerId = gameState.players[gameState.activeIndex]?.id;
+    if (!gameState.legActive || currentPlayerId !== startingPlayerId) {
+      break;
+    }
+    if (!gameState.currentTurn || gameState.currentTurn.playerId !== startingPlayerId) {
+      break;
+    }
+  }
+}
+
 function setViewMode(view) {
   const normalized = view === "play" ? "play" : "setup";
   if (gameState.viewMode === normalized) {
@@ -770,6 +803,47 @@ function normalizeDart(dart) {
   if (!dart) return null;
   const { readable: _ignored, ...rest } = dart;
   return { ...rest, label: shortLabelForDart(dart) };
+}
+
+function dartFromToken(token) {
+  if (!token) return null;
+  const trimmed = token.trim().toUpperCase();
+  if (!trimmed) return null;
+
+  if (trimmed === "SB" || trimmed === "25") {
+    return { label: "SB", readable: "Single Bull", score: 25, isDouble: false, multiplier: 1 };
+  }
+  if (trimmed === "DB" || trimmed === "50") {
+    return { label: "DB", readable: "Double Bull", score: 50, isDouble: true, multiplier: 2 };
+  }
+  if (trimmed === "0" || trimmed === "MISS") {
+    return { label: "0", readable: "0", score: 0, isDouble: false, multiplier: 1 };
+  }
+
+  let multiplier = 1;
+  let base = null;
+
+  if (/^T(\d{1,2})$/.test(trimmed)) {
+    multiplier = 3;
+    base = parseInt(trimmed.slice(1), 10);
+  } else if (/^D(\d{1,2})$/.test(trimmed)) {
+    multiplier = 2;
+    base = parseInt(trimmed.slice(1), 10);
+  } else if (/^S(\d{1,2})$/.test(trimmed)) {
+    multiplier = 1;
+    base = parseInt(trimmed.slice(1), 10);
+  } else if (/^\d{1,2}$/.test(trimmed)) {
+    multiplier = 1;
+    base = parseInt(trimmed, 10);
+  }
+
+  if (!Number.isFinite(base) || base < 0 || base > 20) return null;
+  const config = MULTIPLIER_CONFIG[multiplier] || MULTIPLIER_CONFIG[1];
+  const label = base === 0 ? "0" : multiplier === 1 ? `${base}` : `${config.short}${base}`;
+  const readable =
+    base === 0 ? "0" : multiplier === 1 ? `Single ${base}` : `${config.label} ${base}`;
+
+  return { label, readable, score: base * multiplier, isDouble: multiplier === 2, multiplier };
 }
 
 function shortLabelForDart(dart) {
