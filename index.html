@@ -58,6 +58,13 @@
             <option value="double">Double Out</option>
           </select>
         </div>
+        <div class="form-row">
+          <label for="match-mode">Matchmodus</label>
+          <select id="match-mode" name="matchMode">
+            <option value="single" selected>Einzel-Leg</option>
+            <option value="bestOfThreeLegs">Sätze (Best of 3 Legs, 2 Sätze zum Sieg)</option>
+          </select>
+        </div>
         <div class="form-actions">
           <button type="submit" class="primary">Leg starten</button>
           <button type="button" id="reset-btn" class="ghost">Zurücksetzen</button>
@@ -270,6 +277,7 @@
               <th scope="col">Spieler</th>
               <th scope="col">Ø/Dart</th>
               <th scope="col">Ø 3-Dart</th>
+              <th scope="col">Sätze</th>
               <th scope="col">Legs</th>
               <th scope="col">Spiele</th>
             </tr>
@@ -301,13 +309,21 @@
         <span class="player-indicator" aria-hidden="true">●</span>
       </header>
       <dl class="player-stats">
-        <div>
+        <div class="player-sets-wrapper">
+          <dt>Sätze</dt>
+          <dd class="player-sets">0</dd>
+        </div>
+        <div class="player-legs-wrapper">
+          <dt>Legs</dt>
+          <dd class="player-legs">0</dd>
+        </div>
+        <div class="player-score-wrapper">
           <dt>Rest</dt>
           <dd class="player-score">501</dd>
         </div>
-        <div>
+        <div class="player-last-wrapper">
           <dt>Letzter Wurf</dt>
-          <dd class="player-last">–</dd>
+          <dd class="player-last">-</dd>
         </div>
       </dl>
     </article>

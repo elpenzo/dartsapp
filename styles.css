@@ -248,7 +248,7 @@ body.leaderboard-view .leaderboard-card {
 .leaderboard-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 640px;
+  min-width: 720px;
 }
 
 .leaderboard-table th,
@@ -592,8 +592,14 @@ body.play-view .player-card.active {
 
 .player-stats {
   display: flex;
+  flex-wrap: wrap;
   gap: 1.25rem;
   margin: 0;
+}
+
+.player-stats > div {
+  flex: 1 1 140px;
+  min-width: 120px;
 }
 
 .player-stats dt {
@@ -605,6 +611,11 @@ body.play-view .player-card.active {
   margin: 0.15rem 0 0;
   font-size: 1.5rem;
   font-weight: 700;
+}
+
+body:not(.sets-mode) .player-sets-wrapper,
+body:not(.sets-mode) .player-legs-wrapper {
+  display: none;
 }
 
 .voice-console {
@@ -977,12 +988,12 @@ body.play-view .player-card.active {
 
 .history-item {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr);
+  grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, 1fr);
   gap: 0.5rem;
   padding: 0.6rem;
   border-radius: 8px;
   background: rgba(23, 32, 54, 0.05);
-  align-items: baseline;
+  align-items: center;
 }
 
 .history-item .player {
@@ -991,6 +1002,16 @@ body.play-view .player-card.active {
 
 .history-item .summary {
   color: var(--text-muted);
+}
+
+.history-item .remaining {
+  justify-self: end;
+  font-weight: 600;
+}
+
+.history-item .leg-info {
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .history-item.bust {

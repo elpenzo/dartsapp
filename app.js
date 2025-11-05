@@ -11,6 +11,23 @@ const OUT_MODE_LABELS = {
   single: "Single Out",
 };
 const PROFILE_STORAGE_KEY = "dartsProfiles";
+const MATCH_MODES = {
+  single: {
+    id: "single",
+    label: "Einzel-Leg",
+    setsToWin: 1,
+    legsPerSet: 1,
+    legsToWin: 1,
+  },
+  bestOfThreeLegs: {
+    id: "bestOfThreeLegs",
+    label: "Sätze (Best of 3 Legs)",
+    setsToWin: 2,
+    legsPerSet: 3,
+    legsToWin: 2,
+  },
+};
+const DEFAULT_MATCH_MODE = "single";
 
 const elements = {
   setupForm: document.getElementById("setup-form"),
@@ -29,6 +46,7 @@ const elements = {
   template: document.getElementById("scoreboard-item-template"),
   startingScoreSelect: document.getElementById("starting-score"),
   outModeSelect: document.getElementById("out-mode"),
+  matchModeSelect: document.getElementById("match-mode"),
   playerOneProfileSelect: document.getElementById("player-one-profile"),
   playerTwoProfileSelect: document.getElementById("player-two-profile"),
   playerOneInput: document.getElementById("player-one"),
@@ -71,6 +89,13 @@ const gameState = {
   viewMode: "setup",
   statsCommitted: false,
   leaderboardSort: "average",
+  matchMode: DEFAULT_MATCH_MODE,
+  matchConfig: { ...MATCH_MODES[DEFAULT_MATCH_MODE] },
+  currentSet: 1,
+  currentLeg: 1,
+  legStarterIndex: 0,
+  lastLegWinnerId: null,
+  matchCompleted: false,
 };
 
 let profiles = [];
@@ -124,6 +149,91 @@ async function syncProfilesToServer(currentProfiles) {
     console.warn("Profile konnten nicht zum Server synchronisiert werden:", error);
     serverSyncDisabled = true;
   }
+}
+
+function getCurrentMatchConfig() {
+  return (
+    gameState.matchConfig ||
+    { ...(MATCH_MODES[gameState.matchMode] || MATCH_MODES[DEFAULT_MATCH_MODE]) }
+  );
+}
+
+function isSetsModeActive(config = getCurrentMatchConfig()) {
+  return (config.setsToWin || 1) > 1 || (config.legsPerSet || 1) > 1;
+}
+
+function legsNeededForSet(config = getCurrentMatchConfig()) {
+  if (config.legsToWin) return config.legsToWin;
+  const legsPerSet = config.legsPerSet || 1;
+  return Math.floor(legsPerSet / 2) + 1;
+}
+
+function computeNextLegStarter() {
+  const playersCount = gameState.players.length || 1;
+  const next = (gameState.legStarterIndex + 1) % playersCount;
+  gameState.legStarterIndex = next;
+  return next;
+}
+
+function prepareNextLeg() {
+  const nextStarter = computeNextLegStarter();
+  gameState.players.forEach((player) => {
+    player.score = gameState.startingScore;
+    player.lastTurn = null;
+  });
+  gameState.activeIndex = nextStarter;
+  gameState.currentTurn = createNewTurn();
+  gameState.legActive = true;
+  gameState.winnerId = null;
+  gameState.snapshots = [];
+  gameState.lastLegWinnerId = null;
+  gameState.matchCompleted = false;
+}
+
+function handleLegWin(player) {
+  if (!player) return;
+  const config = getCurrentMatchConfig();
+  const legsToWin = legsNeededForSet(config);
+  const setsToWin = config.setsToWin || 1;
+
+  gameState.legActive = false;
+  gameState.lastLegWinnerId = player.id;
+  gameState.matchCompleted = false;
+
+  player.totalLegsWon = (player.totalLegsWon || 0) + 1;
+  player.legsThisSet = (player.legsThisSet || 0) + 1;
+
+  const displayName = getPlayerDisplayName(player);
+  let setWon = false;
+
+  if (player.legsThisSet >= legsToWin) {
+    setWon = true;
+    player.setsWon = (player.setsWon || 0) + 1;
+  }
+
+  const matchWon = player.setsWon >= setsToWin;
+
+  if (matchWon) {
+    gameState.winnerId = player.id;
+    gameState.matchCompleted = true;
+    notifyVoiceStatus("success", `${displayName} gewinnt das Match`);
+    finalizeGameStats();
+    return;
+  }
+
+  if (setWon) {
+    gameState.players.forEach((p) => {
+      p.legsThisSet = 0;
+    });
+    gameState.currentSet = (gameState.currentSet || 1) + 1;
+    gameState.currentLeg = 1;
+    notifyVoiceStatus("info", `${displayName} gewinnt den Satz`);
+  } else {
+    gameState.currentLeg = (gameState.currentLeg || 1) + 1;
+    notifyVoiceStatus("info", `${displayName} gewinnt das Leg`);
+  }
+
+  prepareNextLeg();
 }
 
 class SpeechEngine {
@@ -257,16 +367,23 @@ function onSetupSubmit(event) {
   const startingScore = parseInt(formData.get("startingScore"), 10) || DEFAULT_STARTING_SCORE;
   const outModeRaw = formData.get("outMode");
   const outMode = OUT_MODE_LABELS[outModeRaw] ? outModeRaw : DEFAULT_OUT_MODE;
+  const matchModeRaw = formData.get("matchMode");
+  const matchMode = MATCH_MODES[matchModeRaw] ? matchModeRaw : DEFAULT_MATCH_MODE;
 
   const playerConfigs = [
     createPlayerConfig(1, formData, elements.playerOneProfileSelect, elements.playerOneInput),
     createPlayerConfig(2, formData, elements.playerTwoProfileSelect, elements.playerTwoInput),
   ];
 
-  startGame(playerConfigs, startingScore, outMode);
+  startGame(playerConfigs, startingScore, outMode, matchMode);
 }
 
-function startGame(playerConfigs, startingScore, outMode = DEFAULT_OUT_MODE) {
+function startGame(
+  playerConfigs,
+  startingScore,
+  outMode = DEFAULT_OUT_MODE,
+  matchMode = DEFAULT_MATCH_MODE
+) {
   const configs = Array.isArray(playerConfigs)
     ? playerConfigs.map((entry, index) =>
         typeof entry === "string"
@@ -302,11 +419,22 @@ function startGame(playerConfigs, startingScore, outMode = DEFAULT_OUT_MODE) {
       totalPointsThisGame: 0,
       totalDartsThisGame: 0,
       statsHistory: [],
+      legsThisSet: 0,
+      totalLegsWon: 0,
+      setsWon: 0,
     };
   });
   gameState.activeIndex = 0;
   gameState.startingScore = startingScore;
   gameState.outMode = OUT_MODE_LABELS[outMode] ? outMode : DEFAULT_OUT_MODE;
+  const matchConfig = MATCH_MODES[matchMode] || MATCH_MODES[DEFAULT_MATCH_MODE];
+  gameState.matchMode = matchConfig.id;
+  gameState.matchConfig = { ...matchConfig };
+  gameState.currentSet = 1;
+  gameState.currentLeg = 1;
+  gameState.legStarterIndex = 0;
+  gameState.lastLegWinnerId = null;
+  gameState.matchCompleted = false;
   gameState.legActive = true;
   gameState.currentTurn = createNewTurn();
   gameState.history = [];
@@ -325,6 +453,9 @@ function resetGame() {
   if (elements.playerTwoProfileSelect) {
     elements.playerTwoProfileSelect.value = "";
   }
+  if (elements.matchModeSelect) {
+    elements.matchModeSelect.value = DEFAULT_MATCH_MODE;
+  }
   handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
   handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
   const defaultConfigs = [
@@ -337,7 +468,7 @@ function resetGame() {
       profileId: "",
     },
   ];
-  startGame(defaultConfigs, DEFAULT_STARTING_SCORE, DEFAULT_OUT_MODE);
+  startGame(defaultConfigs, DEFAULT_STARTING_SCORE, DEFAULT_OUT_MODE, DEFAULT_MATCH_MODE);
   elements.manualScoreInput.value = "";
   elements.lastUtterance.textContent = "-";
   elements.lastInterpretation.textContent = "-";
@@ -616,9 +747,7 @@ function applyDart(interpretation) {
 
   if (remaining === 0) {
     finishTurn(false, true);
-    gameState.legActive = false;
-    gameState.winnerId = player.id;
-    finalizeGameStats();
+    handleLegWin(player);
   } else if (gameState.currentTurn.darts.length >= MAX_DARTS_PER_TURN) {
     finishTurn(false, false);
     advancePlayer();
@@ -672,9 +801,7 @@ function applyTurnResult(result) {
   gameState.currentTurn = null;
 
   if (legWon) {
-    gameState.legActive = false;
-    gameState.winnerId = player.id;
-    finalizeGameStats();
+    handleLegWin(player);
   } else {
     advancePlayer();
   }
@@ -706,6 +833,9 @@ function pushHistory(turn, player, legWon = false) {
     remaining: player.score,
     timestamp: Date.now(),
     legWon,
+    set: gameState.currentSet,
+    leg: gameState.currentLeg,
+    matchMode: gameState.matchMode,
   };
   gameState.history.unshift(entry);
 }
@@ -739,11 +869,20 @@ function recordSnapshot() {
       id: player.id,
       score: player.score,
       lastTurn: player.lastTurn,
+      legsThisSet: player.legsThisSet || 0,
+      totalLegsWon: player.totalLegsWon || 0,
+      setsWon: player.setsWon || 0,
     })),
     history: structuredClone(gameState.history),
     currentTurn: gameState.currentTurn ? structuredClone(gameState.currentTurn) : null,
     legActive: gameState.legActive,
     winnerId: gameState.winnerId,
+    matchMode: gameState.matchMode,
+    currentSet: gameState.currentSet,
+    currentLeg: gameState.currentLeg,
+    legStarterIndex: gameState.legStarterIndex,
+    lastLegWinnerId: gameState.lastLegWinnerId,
+    matchCompleted: gameState.matchCompleted,
   };
   gameState.snapshots.push(snapshot);
   if (gameState.snapshots.length > 20) {
@@ -760,12 +899,24 @@ function undoLastTurn() {
   gameState.activeIndex = lastSnapshot.activeIndex;
   gameState.legActive = lastSnapshot.legActive;
   gameState.winnerId = lastSnapshot.winnerId;
+  gameState.matchMode = lastSnapshot.matchMode || DEFAULT_MATCH_MODE;
+  gameState.matchConfig = {
+    ...(MATCH_MODES[gameState.matchMode] || MATCH_MODES[DEFAULT_MATCH_MODE]),
+  };
+  gameState.currentSet = lastSnapshot.currentSet || 1;
+  gameState.currentLeg = lastSnapshot.currentLeg || 1;
+  gameState.legStarterIndex = lastSnapshot.legStarterIndex || 0;
+  gameState.lastLegWinnerId = lastSnapshot.lastLegWinnerId || null;
+  gameState.matchCompleted = Boolean(lastSnapshot.matchCompleted);
   gameState.statsCommitted = false;
   gameState.players.forEach((player) => {
     const snapshotPlayer = lastSnapshot.players.find((p) => p.id === player.id);
     if (snapshotPlayer) {
       player.score = snapshotPlayer.score;
       player.lastTurn = snapshotPlayer.lastTurn;
+      player.legsThisSet = snapshotPlayer.legsThisSet || 0;
+      player.totalLegsWon = snapshotPlayer.totalLegsWon || 0;
+      player.setsWon = snapshotPlayer.setsWon || 0;
     }
   });
   gameState.history = lastSnapshot.history;
@@ -795,9 +946,13 @@ function render() {
 }
 
 function renderScoreboard() {
+  const matchConfig = getCurrentMatchConfig();
+  const isSetsMode = isSetsModeActive(matchConfig);
   if (elements.gameSettings) {
-    elements.gameSettings.textContent = `Modus: ${gameState.startingScore} Punkte - ${outModeLabel()}`;
+    const matchLabel = matchConfig.label || MATCH_MODES[DEFAULT_MATCH_MODE].label;
+    elements.gameSettings.textContent = `Modus: ${gameState.startingScore} Punkte - ${outModeLabel()} - Match: ${matchLabel}`;
   }
+  document.body.classList.toggle("sets-mode", isSetsMode);
 
   elements.scoreboard.innerHTML = "";
 
@@ -811,6 +966,8 @@ function renderScoreboard() {
     const avatarFallback = fragment.querySelector(".player-avatar-fallback");
     const scoreNode = fragment.querySelector(".player-score");
     const lastNode = fragment.querySelector(".player-last");
+    const setsNode = fragment.querySelector(".player-sets");
+    const legsNode = fragment.querySelector(".player-legs");
 
     const displayName = getPlayerDisplayName(player);
     nameNode.textContent = displayName;
@@ -839,6 +996,12 @@ function renderScoreboard() {
 
     scoreNode.textContent = player.score;
     lastNode.textContent = player.lastTurn || "-";
+    if (setsNode) {
+      setsNode.textContent = String(player.setsWon || 0);
+    }
+    if (legsNode) {
+      legsNode.textContent = String(player.legsThisSet || 0);
+    }
 
     if (gameState.activeIndex === index && gameState.legActive) {
       node.classList.add("active");
@@ -864,6 +1027,22 @@ function renderHistory() {
     playerSpan.className = "player";
     playerSpan.textContent = entry.playerName;
 
+    li.appendChild(playerSpan);
+
+    const entryConfig = MATCH_MODES[entry.matchMode] || MATCH_MODES[DEFAULT_MATCH_MODE];
+    const showSetDetails =
+      (entryConfig.setsToWin || 1) > 1 || (entryConfig.legsPerSet || 1) > 1;
+    if (entry.set || entry.leg) {
+      const infoSpan = document.createElement("span");
+      infoSpan.className = "leg-info";
+      const setLabel = showSetDetails && entry.set ? `Satz ${entry.set}` : "";
+      const legLabel = entry.leg ? `Leg ${entry.leg}` : "";
+      infoSpan.textContent = [setLabel, legLabel].filter(Boolean).join(" · ");
+      if (infoSpan.textContent) {
+        li.appendChild(infoSpan);
+      }
+    }
+
     const summarySpan = document.createElement("span");
     summarySpan.className = "summary";
     summarySpan.textContent = entry.darts.map((dart) => shortLabelForDart(dart)).join(", ") || "-";
@@ -873,7 +1052,6 @@ function renderHistory() {
     const remainingText = entry.bust ? "Bust" : `Rest: ${entry.remaining}`;
     remainingSpan.textContent = entry.legWon ? `${remainingText} 🎯` : remainingText;
 
-    li.appendChild(playerSpan);
     li.appendChild(summarySpan);
     li.appendChild(remainingSpan);
 
@@ -996,9 +1174,9 @@ function finalizeGameStats() {
     profile.stats.gamesPlayed += 1;
     profile.stats.totalPoints += player.totalPointsThisGame || 0;
     profile.stats.totalDarts += player.totalDartsThisGame || 0;
-    if (player.id === gameState.winnerId) {
-      profile.stats.legsWon += 1;
-    }
+    profile.stats.legsWon += player.totalLegsWon || 0;
+    const setsWonThisMatch = player.setsWon || (player.id === gameState.winnerId ? 1 : 0);
+    profile.stats.setsWon += setsWonThisMatch;
 
     const entry = {
       id: uid(),
@@ -1010,6 +1188,8 @@ function finalizeGameStats() {
           ? Number((player.totalPointsThisGame / player.totalDartsThisGame).toFixed(2))
           : 0,
       legWon: player.id === gameState.winnerId,
+      setsWon: setsWonThisMatch,
+      legsWon: player.totalLegsWon || 0,
     };
 
     profile.history = profile.history || [];
@@ -1029,9 +1209,13 @@ function finalizeGameStats() {
   gameState.players.forEach((player) => {
     player.totalPointsThisGame = 0;
     player.totalDartsThisGame = 0;
+    player.totalLegsWon = 0;
+    player.legsThisSet = 0;
+    player.setsWon = 0;
   });
 
   gameState.statsCommitted = true;
+  saveProfiles();
 }
 
 function setViewMode(view) {
@@ -1076,6 +1260,8 @@ function updateViewModeUI() {
 
 function updateActivePlayerBanner() {
   if (!elements.activePlayerBanner) return;
+  const matchConfig = getCurrentMatchConfig();
+  const isSetsMode = isSetsModeActive(matchConfig);
   let message = "";
 
   if (!gameState.players.length) {
@@ -1083,18 +1269,28 @@ function updateActivePlayerBanner() {
   } else if (gameState.winnerId) {
     const winner = gameState.players.find((player) => player.id === gameState.winnerId);
     const winnerName = getPlayerDisplayName(winner);
-    message = winnerName ? `Leg gewonnen von ${winnerName}` : "";
+    if (winnerName) {
+      message = isSetsMode ? `Match gewonnen von ${winnerName}` : `Leg gewonnen von ${winnerName}`;
+    }
   } else if (!gameState.legActive) {
     const starter = gameState.players[gameState.activeIndex] || gameState.players[0];
     const starterName = getPlayerDisplayName(starter);
-    message = starterName ? `Bereit: ${starterName} startet das nächste Leg` : "";
+    if (starterName) {
+      const legLabel = isSetsMode
+        ? `Satz ${gameState.currentSet} · Leg ${gameState.currentLeg}`
+        : "das nächste Leg";
+      message = `Bereit: ${starterName} startet ${legLabel}`;
+    }
   } else {
     const active = gameState.players[gameState.activeIndex];
     if (active) {
       const activeName = getPlayerDisplayName(active);
       const dartsThrown = gameState.currentTurn?.darts.length ?? 0;
       const dartsInfo = dartsThrown ? ` - ${dartsThrown}/3 Darts` : "";
-      message = `Am Zug: ${activeName} - Rest ${active.score}${dartsInfo}`;
+      const context = isSetsMode
+        ? ` · Satz ${gameState.currentSet} · Leg ${gameState.currentLeg}`
+        : "";
+      message = `Am Zug: ${activeName} - Rest ${active.score}${dartsInfo}${context}`;
     }
   }
 
@@ -1437,6 +1633,7 @@ function renderProfileList() {
       const averageThreeDart = formatAverage(profile.stats.totalPoints * 3, profile.stats.totalDarts);
       const games = profile.stats.gamesPlayed;
       const legs = profile.stats.legsWon;
+      const sets = profile.stats.setsWon || 0;
       const initial = (profile.nickname || profile.firstName || displayName || "?").charAt(0).toUpperCase();
 
       const avatarMarkup = profile.image
@@ -1448,7 +1645,15 @@ function renderProfileList() {
         .map((entry) => {
           const dateLabel = formatProfileDate(entry.date);
           const avg = entry.darts ? formatAverage(entry.points, entry.darts) : "0.00";
-          return `<li>${dateLabel}: ${entry.points} Punkte · ${entry.darts} Darts · Ø ${avg}${entry.legWon ? " · Sieg" : ""}</li>`;
+          const setsWon = entry.setsWon != null ? entry.setsWon : entry.legWon ? 1 : 0;
+          const legsWon = entry.legsWon != null ? entry.legsWon : entry.legWon ? 1 : 0;
+          const setInfo =
+            setsWon || legsWon
+              ? ` · Sätze: ${setsWon} · Legs: ${legsWon}`
+              : "";
+          return `<li>${dateLabel}: ${entry.points} Punkte · ${entry.darts} Darts · Ø ${avg}${setInfo}${
+            entry.legWon ? " · Sieg" : ""
+          }</li>`;
         })
         .join("");
 
@@ -1457,7 +1662,7 @@ function renderProfileList() {
         <div class="profile-info">
           <h4>${displayName}</h4>
           <span>${fullName || ""}</span>
-          <p class="profile-stats">Spiele: ${games} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${
+          <p class="profile-stats">Spiele: ${games} · Sätze: ${sets} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${
         profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
       }</p>
           ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
@@ -1524,6 +1729,7 @@ function renderLeaderboard() {
       const points = Number(stats.totalPoints) || 0;
       const games = Number(stats.gamesPlayed) || 0;
       const legs = Number(stats.legsWon) || 0;
+      const sets = Number(stats.setsWon) || 0;
       const averageValue = darts > 0 ? points / darts : 0;
       return {
         profile,
@@ -1534,6 +1740,7 @@ function renderLeaderboard() {
         averageLabel: formatAverage(points, darts),
         threeDartLabel: darts > 0 ? (averageValue * 3).toFixed(2) : "0.00",
         legs,
+        sets,
         games,
         hasStats: games > 0 || darts > 0,
       };
@@ -1544,9 +1751,11 @@ function renderLeaderboard() {
   leaderboardEntries.sort((a, b) => {
     if (sortKey === "legs") {
       if (b.legs !== a.legs) return b.legs - a.legs;
+      if (b.sets !== a.sets) return b.sets - a.sets;
       if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
     } else {
       if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
+      if (b.sets !== a.sets) return b.sets - a.sets;
       if (b.legs !== a.legs) return b.legs - a.legs;
     }
     if (b.games !== a.games) return b.games - a.games;
@@ -1617,6 +1826,10 @@ function renderLeaderboard() {
     threeDartCell.textContent = entry.threeDartLabel;
     tr.appendChild(threeDartCell);
 
+    const setsCell = document.createElement("td");
+    setsCell.textContent = String(entry.sets);
+    tr.appendChild(setsCell);
+
     const legsCell = document.createElement("td");
     legsCell.textContent = String(entry.legs);
     tr.appendChild(legsCell);
@@ -1635,6 +1848,7 @@ function ensureProfileStats(profile) {
   profile.stats = profile.stats || {};
   profile.stats.gamesPlayed = profile.stats.gamesPlayed || 0;
   profile.stats.legsWon = profile.stats.legsWon || 0;
+  profile.stats.setsWon = profile.stats.setsWon || 0;
   profile.stats.totalPoints = profile.stats.totalPoints || 0;
   profile.stats.totalDarts = profile.stats.totalDarts || 0;
   profile.history = profile.history || [];
