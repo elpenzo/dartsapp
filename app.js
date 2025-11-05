@@ -29,10 +29,13 @@ const elements = {
   startingScoreSelect: document.getElementById("starting-score"),
   outModeSelect: document.getElementById("out-mode"),
   gameSettings: document.getElementById("game-settings"),
+  activePlayerBanner: document.getElementById("active-player-banner"),
+  scoreboardCard: document.querySelector(".scoreboard"),
   undoBtn: document.getElementById("undo-btn"),
   dartModeSwitch: document.querySelector(".dart-mode-switch"),
   dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
   dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
+  viewToggleButtons: Array.from(document.querySelectorAll(".view-toggle-btn")),
 };
 
 const gameState = {
@@ -46,6 +49,7 @@ const gameState = {
   winnerId: null,
   snapshots: [],
   dartMultiplier: 1,
+  viewMode: "setup",
 };
 
 class SpeechEngine {
@@ -109,6 +113,11 @@ function initialize() {
   if (elements.undoBtn) {
     elements.undoBtn.addEventListener("click", () => undoLastTurn());
   }
+  if (elements.viewToggleButtons.length) {
+    elements.viewToggleButtons.forEach((button) => {
+      button.addEventListener("click", () => setViewMode(button.dataset.view));
+    });
+  }
   if (elements.dartPicker) {
     initializeDartPicker();
     elements.dartPicker.addEventListener("click", onDartPickerClick);
@@ -116,6 +125,8 @@ function initialize() {
   if (elements.dartModeSwitch) {
     elements.dartModeSwitch.addEventListener("click", onDartModeClick);
   }
+
+  updateViewModeUI();
 
   if (!speechEngine.supported) {
     elements.voiceStatus.textContent = "Nicht unterstützt";
@@ -620,6 +631,8 @@ function renderScoreboard() {
 
     elements.scoreboard.appendChild(fragment);
   });
+
+  updateActivePlayerBanner();
 }
 
 function renderHistory() {
@@ -699,6 +712,58 @@ function updateDartNumberButtons() {
 function updateUndoAvailability() {
   if (!elements.undoBtn) return;
   elements.undoBtn.disabled = gameState.snapshots.length === 0;
+}
+
+function setViewMode(view) {
+  const normalized = view === "play" ? "play" : "setup";
+  if (gameState.viewMode === normalized) {
+    updateViewModeUI();
+    return;
+  }
+  gameState.viewMode = normalized;
+  updateViewModeUI();
+  if (normalized === "play") {
+    requestAnimationFrame(() => {
+      elements.scoreboardCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+}
+
+function updateViewModeUI() {
+  const isPlayView = gameState.viewMode === "play";
+  document.body.classList.toggle("play-view", isPlayView);
+  elements.viewToggleButtons.forEach((button) => {
+    const isActive = button.dataset.view === (isPlayView ? "play" : "setup");
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+  if (isPlayView) {
+    updateActivePlayerBanner();
+  }
+}
+
+function updateActivePlayerBanner() {
+  if (!elements.activePlayerBanner) return;
+  let message = "";
+
+  if (!gameState.players.length) {
+    message = "";
+  } else if (gameState.winnerId) {
+    const winner = gameState.players.find((player) => player.id === gameState.winnerId);
+    message = winner ? `Leg gewonnen von ${winner.name}` : "";
+  } else if (!gameState.legActive) {
+    const starter = gameState.players[gameState.activeIndex] || gameState.players[0];
+    message = starter ? `Bereit: ${starter.name} startet das nächste Leg` : "";
+  } else {
+    const active = gameState.players[gameState.activeIndex];
+    if (active) {
+      const dartsThrown = gameState.currentTurn?.darts.length ?? 0;
+      const dartsInfo = dartsThrown ? ` – ${dartsThrown}/3 Darts` : "";
+      message = `Am Zug: ${active.name} – Rest ${active.score}${dartsInfo}`;
+    }
+  }
+
+  elements.activePlayerBanner.textContent = message;
 }
 
 function normalizeDart(dart) {

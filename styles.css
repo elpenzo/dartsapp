@@ -52,6 +52,94 @@ body {
   gap: 1rem;
 }
 
+.play-view .app-main,
+body.play-view .app-main {
+  width: min(1200px, 96vw);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+.play-view .setup-card,
+body.play-view .setup-card {
+  display: none;
+}
+
+.play-view .active-player-banner,
+body.play-view .active-player-banner {
+  display: block;
+}
+
+.play-view .scoreboard,
+body.play-view .scoreboard {
+  order: 1;
+  grid-column: span 2;
+}
+
+.play-view .voice-console,
+body.play-view .voice-console {
+  order: 2;
+}
+
+.play-view .history,
+body.play-view .history {
+  order: 3;
+  grid-column: span 2;
+}
+
+.play-view .scoreboard-grid,
+body.play-view .scoreboard-grid {
+  gap: 1.2rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.play-view .player-card,
+body.play-view .player-card {
+  padding: 1.5rem;
+  gap: 0.8rem;
+}
+
+.play-view .player-card header,
+body.play-view .player-card header {
+  font-size: 1.05rem;
+}
+
+.play-view .player-stats,
+body.play-view .player-stats {
+  gap: 2.25rem;
+}
+
+.play-view .player-stats dd,
+body.play-view .player-stats dd {
+  font-size: 2.3rem;
+}
+
+.play-view .manual-row,
+body.play-view .manual-row {
+  gap: 0.6rem;
+}
+
+.play-view .manual-actions-primary,
+body.play-view .manual-actions-primary {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.play-view .manual-undo,
+body.play-view .manual-undo {
+  align-self: stretch;
+}
+
+.play-view .dart-picker,
+body.play-view .dart-picker {
+  padding: 0.75rem;
+}
+
+.play-view .dart-mode-switch,
+body.play-view .dart-mode-switch {
+  align-self: stretch;
+  justify-content: space-between;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--surface-border);
@@ -70,6 +158,36 @@ h3 {
 .tagline {
   margin: 0;
   color: var(--text-muted);
+}
+
+.view-toggle {
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  background: rgba(36, 85, 245, 0.08);
+  padding: 0.25rem;
+  border-radius: 999px;
+  border: 1px solid rgba(36, 85, 245, 0.2);
+}
+
+.view-toggle-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.view-toggle-btn:hover {
+  color: var(--text);
+}
+
+.view-toggle-btn.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(36, 85, 245, 0.25);
 }
 
 .setup-form {
@@ -95,6 +213,18 @@ h3 {
   margin: 0 0 0.5rem;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.active-player-banner {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--primary);
+  display: none;
+}
+
+.active-player-banner:empty {
+  display: none !important;
 }
 
 .form-actions {
@@ -178,6 +308,12 @@ button.ghost {
 .player-card.winner {
   border-color: var(--success);
   background: linear-gradient(135deg, rgba(31, 157, 85, 0.1), rgba(31, 157, 85, 0));
+}
+
+.play-view .player-card.active,
+body.play-view .player-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 14px 30px rgba(36, 85, 245, 0.2);
 }
 
 .player-stats {
@@ -301,17 +437,19 @@ button.ghost {
   align-self: flex-start;
 }
 
-.manual-picker {
-  margin-top: 0.75rem;
+.scoreboard-quick {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--surface-border);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.manual-picker h4 {
+.scoreboard-quick h3 {
   margin: 0;
-  font-size: 0.95rem;
-  color: var(--text-muted);
+  font-size: 1rem;
+  color: var(--text);
 }
 
 .dart-mode-switch {
