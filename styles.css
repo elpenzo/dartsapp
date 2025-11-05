@@ -151,6 +151,29 @@ body.play-view .combo-button {
   padding: 0.8rem 0.6rem;
 }
 
+.profile-manager {
+  display: none;
+}
+
+.profiles-view .app-main,
+body.profiles-view .app-main {
+  width: min(900px, 94vw);
+  grid-template-columns: 1fr;
+}
+
+.profiles-view .setup-card,
+.profiles-view .scoreboard,
+.profiles-view .voice-console,
+.profiles-view .history {
+  display: none;
+}
+
+.profiles-view .profile-manager,
+body.profiles-view .profile-manager {
+  display: block;
+  grid-column: 1 / -1;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--surface-border);
@@ -294,11 +317,76 @@ button.ghost {
   gap: 0.5rem;
 }
 
-.player-card header {
+.player-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   font-weight: 600;
+}
+
+.player-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.player-avatar-wrapper {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+}
+
+.player-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(36, 85, 245, 0.25);
+  background: rgba(36, 85, 245, 0.08);
+  display: block;
+}
+
+.player-avatar[hidden] {
+  display: none;
+}
+
+.player-avatar-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(36, 85, 245, 0.08);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 1.05rem;
+  border: 2px dashed rgba(36, 85, 245, 0.2);
+}
+
+.player-avatar-wrapper.has-photo .player-avatar-fallback {
+  display: none;
+}
+.player-avatar-wrapper.has-photo .player-avatar {
+  display: block;
+}
+
+.player-name-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.player-name-wrapper h3 {
+  margin: 0;
+}
+
+.player-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 .player-indicator {
@@ -488,6 +576,120 @@ body.play-view .player-card.active {
 
 .combo-button:active {
   transform: translateY(1px);
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.profile-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.profile-image-preview {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.profile-image-preview img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(36, 85, 245, 0.2);
+  background: rgba(36, 85, 245, 0.05);
+}
+
+.profile-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.profile-list-container {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.profile-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.profile-card {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  background: rgba(23, 32, 54, 0.02);
+  align-items: flex-start;
+}
+
+.profile-card img {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(36, 85, 245, 0.15);
+  background: rgba(36, 85, 245, 0.05);
+}
+
+.profile-card .profile-avatar-fallback {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--primary);
+  background: rgba(36, 85, 245, 0.08);
+  border: 2px dashed rgba(36, 85, 245, 0.2);
+}
+
+.profile-card .profile-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.profile-card .profile-info h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.profile-card .profile-info span {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.profile-card .profile-stats {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.profile-card .profile-history {
+  margin: 0.5rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.profile-card .profile-history li {
+  margin-bottom: 0.25rem;
 }
 
 .dart-mode-switch {

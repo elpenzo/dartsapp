@@ -10,6 +10,7 @@ const OUT_MODE_LABELS = {
   double: "Double Out",
   single: "Single Out",
 };
+const PROFILE_STORAGE_KEY = "dartsProfiles";
 
 const elements = {
   setupForm: document.getElementById("setup-form"),
@@ -28,6 +29,10 @@ const elements = {
   template: document.getElementById("scoreboard-item-template"),
   startingScoreSelect: document.getElementById("starting-score"),
   outModeSelect: document.getElementById("out-mode"),
+  playerOneProfileSelect: document.getElementById("player-one-profile"),
+  playerTwoProfileSelect: document.getElementById("player-two-profile"),
+  playerOneInput: document.getElementById("player-one"),
+  playerTwoInput: document.getElementById("player-two"),
   gameSettings: document.getElementById("game-settings"),
   activePlayerBanner: document.getElementById("active-player-banner"),
   scoreboardCard: document.querySelector(".scoreboard"),
@@ -37,6 +42,15 @@ const elements = {
   dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
   comboButtons: Array.from(document.querySelectorAll(".combo-button")),
   viewToggleButtons: Array.from(document.querySelectorAll(".view-toggle-btn")),
+  profileManager: document.querySelector(".profile-manager"),
+  profileForm: document.getElementById("profile-form"),
+  profileList: document.getElementById("profile-list"),
+  profileImageInput: document.getElementById("profile-image"),
+  profileImagePreview: document.getElementById("profile-image-preview"),
+  profileResetBtn: document.getElementById("profile-reset"),
+  profileFirstName: document.getElementById("profile-first-name"),
+  profileLastName: document.getElementById("profile-last-name"),
+  profileNickname: document.getElementById("profile-nickname"),
 };
 
 const gameState = {
@@ -51,7 +65,11 @@ const gameState = {
   snapshots: [],
   dartMultiplier: 1,
   viewMode: "setup",
+  statsCommitted: false,
 };
+
+let profiles = [];
+let pendingProfileImage = null;
 
 class SpeechEngine {
   constructor(onUtterance, onState) {
@@ -131,6 +149,32 @@ function initialize() {
       button.addEventListener("click", () => applyCombo(button.dataset.combo));
     });
   }
+  if (elements.playerOneProfileSelect && elements.playerOneInput) {
+    elements.playerOneProfileSelect.addEventListener("change", () =>
+      handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1")
+    );
+  }
+  if (elements.playerTwoProfileSelect && elements.playerTwoInput) {
+    elements.playerTwoProfileSelect.addEventListener("change", () =>
+      handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2")
+    );
+  }
+  if (elements.profileForm) {
+    elements.profileForm.addEventListener("submit", onProfileFormSubmit);
+  }
+  if (elements.profileImageInput) {
+    elements.profileImageInput.addEventListener("change", onProfileImageChange);
+  }
+  if (elements.profileResetBtn) {
+    elements.profileResetBtn.addEventListener("click", () => resetProfileForm());
+  }
+  if (elements.profileList) {
+    elements.profileList.addEventListener("click", onProfileListClick);
+  }
+
+  loadProfiles();
+  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
+  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
 
   updateViewModeUI();
 
@@ -147,22 +191,57 @@ function initialize() {
 function onSetupSubmit(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
-  const playerNames = [formData.get("playerOne"), formData.get("playerTwo")].filter(Boolean);
   const startingScore = parseInt(formData.get("startingScore"), 10) || DEFAULT_STARTING_SCORE;
   const outModeRaw = formData.get("outMode");
   const outMode = OUT_MODE_LABELS[outModeRaw] ? outModeRaw : DEFAULT_OUT_MODE;
 
-  startGame(playerNames, startingScore, outMode);
+  const playerConfigs = [
+    createPlayerConfig(1, formData, elements.playerOneProfileSelect, elements.playerOneInput),
+    createPlayerConfig(2, formData, elements.playerTwoProfileSelect, elements.playerTwoInput),
+  ];
+
+  startGame(playerConfigs, startingScore, outMode);
 }
 
-function startGame(playerNames, startingScore, outMode = DEFAULT_OUT_MODE) {
-  gameState.players = playerNames.map((name, index) => ({
-    id: `p${index + 1}`,
-    name,
-    score: startingScore,
-    history: [],
-    lastTurn: null,
-  }));
+function startGame(playerConfigs, startingScore, outMode = DEFAULT_OUT_MODE) {
+  const configs = Array.isArray(playerConfigs)
+    ? playerConfigs.map((entry, index) =>
+        typeof entry === "string"
+          ? { name: entry, profileId: "" }
+          : {
+              name: (entry.name || entry.displayName || `Player ${index + 1}`).trim(),
+              profileId: entry.profileId || "",
+            }
+      )
+    : [];
+
+  if (!configs.length) {
+    configs.push({ name: "Player 1", profileId: "" }, { name: "Player 2", profileId: "" });
+  }
+
+  gameState.players = configs.map((config, index) => {
+    const profile = getProfileById(config.profileId);
+    const fallbackName = config.name || `Player ${index + 1}`;
+    const displayName = profile ? getProfileDisplayName(profile) : fallbackName;
+    const fullName = profile
+      ? `${profile.firstName} ${profile.lastName}`.trim()
+      : fallbackName;
+
+    return {
+      id: `p${index + 1}`,
+      name: displayName,
+      displayName,
+      fullName,
+      profileId: profile ? profile.id : "",
+      photo: profile?.image || null,
+      score: startingScore,
+      history: [],
+      lastTurn: null,
+      totalPointsThisGame: 0,
+      totalDartsThisGame: 0,
+      statsHistory: [],
+    };
+  });
   gameState.activeIndex = 0;
   gameState.startingScore = startingScore;
   gameState.outMode = OUT_MODE_LABELS[outMode] ? outMode : DEFAULT_OUT_MODE;
@@ -171,16 +250,46 @@ function startGame(playerNames, startingScore, outMode = DEFAULT_OUT_MODE) {
   gameState.history = [];
   gameState.snapshots = [];
   gameState.winnerId = null;
+  gameState.statsCommitted = false;
 
   render();
 }
 
 function resetGame() {
-  startGame(["Player 1", "Player 2"], DEFAULT_STARTING_SCORE, DEFAULT_OUT_MODE);
   elements.setupForm.reset();
+  if (elements.playerOneProfileSelect) {
+    elements.playerOneProfileSelect.value = "";
+  }
+  if (elements.playerTwoProfileSelect) {
+    elements.playerTwoProfileSelect.value = "";
+  }
+  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
+  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+  const defaultConfigs = [
+    {
+      name: elements.playerOneInput ? elements.playerOneInput.value.trim() || "Player 1" : "Player 1",
+      profileId: "",
+    },
+    {
+      name: elements.playerTwoInput ? elements.playerTwoInput.value.trim() || "Player 2" : "Player 2",
+      profileId: "",
+    },
+  ];
+  startGame(defaultConfigs, DEFAULT_STARTING_SCORE, DEFAULT_OUT_MODE);
   elements.manualScoreInput.value = "";
   elements.lastUtterance.textContent = "-";
   elements.lastInterpretation.textContent = "-";
+  resetProfileForm(true);
+}
+
+function createPlayerConfig(slot, formData, select, input) {
+  const fieldName = slot === 1 ? "playerOne" : "playerTwo";
+  const fallback = `Player ${slot}`;
+  const formValue = formData.get(fieldName);
+  const inputValue = input ? input.value : "";
+  const name = (formValue || inputValue || "").toString().trim() || fallback;
+  const profileId = select?.value || "";
+  return { slot, name, profileId };
 }
 
 function createNewTurn() {
@@ -437,6 +546,7 @@ function applyDart(interpretation) {
   }
 
   recordSnapshot();
+  recordDartStats(player, normalizedDart.score, 1);
   player.score = remaining;
   gameState.currentTurn.darts.push(normalizedDart);
   gameState.currentTurn.spoken.push(interpretation.readable);
@@ -446,6 +556,7 @@ function applyDart(interpretation) {
     finishTurn(false, true);
     gameState.legActive = false;
     gameState.winnerId = player.id;
+    finalizeGameStats();
   } else if (gameState.currentTurn.darts.length >= MAX_DARTS_PER_TURN) {
     finishTurn(false, false);
     advancePlayer();
@@ -472,6 +583,7 @@ function applyTurnResult(result) {
   }
 
   recordSnapshot();
+  recordDartStats(player, result.score, Number(result.dartsCount) || 3);
 
   const turn =
     gameState.currentTurn && gameState.currentTurn.playerId === player.id
@@ -500,6 +612,7 @@ function applyTurnResult(result) {
   if (legWon) {
     gameState.legActive = false;
     gameState.winnerId = player.id;
+    finalizeGameStats();
   } else {
     advancePlayer();
   }
@@ -523,7 +636,7 @@ function pushHistory(turn, player, legWon = false) {
   const entry = {
     id: uid(),
     playerId: player.id,
-    playerName: player.name,
+    playerName: player.displayName || player.name,
     darts: turn.darts.map((dart) => ({ ...dart, label: shortLabelForDart(dart) })),
     spoken: [...turn.spoken],
     bust: turn.bust,
@@ -541,6 +654,14 @@ function registerBust(reason) {
 
   recordSnapshot();
   if (gameState.currentTurn) {
+    const lostPoints = gameState.currentTurn.darts.reduce(
+      (sum, dart) => sum + (dart.score || 0),
+      0
+    );
+    player.totalPointsThisGame = Math.max(
+      0,
+      (player.totalPointsThisGame || 0) - lostPoints
+    );
     player.score = gameState.currentTurn.startingScore;
   }
   finishTurn(true, false);
@@ -621,12 +742,37 @@ function renderScoreboard() {
     const fragment = elements.template.content.cloneNode(true);
     const node = fragment.querySelector(".player-card");
     const nameNode = fragment.querySelector(".player-name");
+    const metaNode = fragment.querySelector(".player-meta");
+    const avatarWrapper = fragment.querySelector(".player-avatar-wrapper");
+    const avatarImage = fragment.querySelector(".player-avatar");
+    const avatarFallback = fragment.querySelector(".player-avatar-fallback");
     const scoreNode = fragment.querySelector(".player-score");
     const lastNode = fragment.querySelector(".player-last");
 
-    nameNode.textContent = player.name;
+    const displayName = player.displayName || player.name;
+    nameNode.textContent = displayName;
+    if (metaNode) {
+      const fullName = player.fullName && player.fullName !== displayName ? player.fullName : "";
+      metaNode.textContent = fullName;
+      metaNode.hidden = !fullName;
+    }
+    if (avatarFallback) {
+      const initial = (displayName || player.name || "?").charAt(0).toUpperCase() || "?";
+      avatarFallback.textContent = initial;
+    }
+    if (avatarImage) {
+      if (player.photo) {
+        avatarImage.src = player.photo;
+        avatarImage.hidden = false;
+        avatarWrapper?.classList.add("has-photo");
+      } else {
+        avatarImage.hidden = true;
+        avatarWrapper?.classList.remove("has-photo");
+      }
+    }
+
     scoreNode.textContent = player.score;
-    lastNode.textContent = player.lastTurn || "–";
+    lastNode.textContent = player.lastTurn || "-";
 
     if (gameState.activeIndex === index && gameState.legActive) {
       node.classList.add("active");
@@ -720,6 +866,14 @@ function updateUndoAvailability() {
   elements.undoBtn.disabled = gameState.snapshots.length === 0;
 }
 
+function recordDartStats(player, points, dartsCount) {
+  if (!player) return;
+  const normalizedPoints = Number(points) || 0;
+  const normalizedDarts = Number(dartsCount) || 0;
+  player.totalPointsThisGame = (player.totalPointsThisGame || 0) + normalizedPoints;
+  player.totalDartsThisGame = (player.totalDartsThisGame || 0) + normalizedDarts;
+}
+
 function applyCombo(sequence) {
   if (!sequence || !gameState.legActive) return;
   const tokens = sequence.split(/[-,]/).map((token) => token.trim()).filter(Boolean);
@@ -747,8 +901,63 @@ function applyCombo(sequence) {
   }
 }
 
+function finalizeGameStats() {
+  if (gameState.statsCommitted || gameState.legActive || !gameState.winnerId) {
+    return;
+  }
+
+  let updated = false;
+
+  gameState.players.forEach((player) => {
+    if (!player.profileId) return;
+    const profile = getProfileById(player.profileId);
+    if (!profile) return;
+
+    ensureProfileStats(profile);
+
+    profile.stats.gamesPlayed += 1;
+    profile.stats.totalPoints += player.totalPointsThisGame || 0;
+    profile.stats.totalDarts += player.totalDartsThisGame || 0;
+    if (player.id === gameState.winnerId) {
+      profile.stats.legsWon += 1;
+    }
+
+    const entry = {
+      id: uid(),
+      date: new Date().toISOString(),
+      points: player.totalPointsThisGame || 0,
+      darts: player.totalDartsThisGame || 0,
+      average:
+        player.totalDartsThisGame > 0
+          ? Number((player.totalPointsThisGame / player.totalDartsThisGame).toFixed(2))
+          : 0,
+      legWon: player.id === gameState.winnerId,
+    };
+
+    profile.history = profile.history || [];
+    profile.history.unshift(entry);
+    if (profile.history.length > 10) {
+      profile.history.length = 10;
+    }
+
+    updated = true;
+  });
+
+  if (updated) {
+    saveProfiles();
+    renderProfileList();
+  }
+
+  gameState.players.forEach((player) => {
+    player.totalPointsThisGame = 0;
+    player.totalDartsThisGame = 0;
+  });
+
+  gameState.statsCommitted = true;
+}
+
 function setViewMode(view) {
-  const normalized = view === "play" ? "play" : "setup";
+  const normalized = view === "play" || view === "profiles" ? view : "setup";
   if (gameState.viewMode === normalized) {
     updateViewModeUI();
     return;
@@ -759,18 +968,23 @@ function setViewMode(view) {
     requestAnimationFrame(() => {
       elements.scoreboardCard?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
+  } else if (normalized === "profiles") {
+    requestAnimationFrame(() => {
+      elements.profileManager?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 }
 
 function updateViewModeUI() {
-  const isPlayView = gameState.viewMode === "play";
-  document.body.classList.toggle("play-view", isPlayView);
+  const currentView = gameState.viewMode;
+  document.body.classList.toggle("play-view", currentView === "play");
+  document.body.classList.toggle("profiles-view", currentView === "profiles");
   elements.viewToggleButtons.forEach((button) => {
-    const isActive = button.dataset.view === (isPlayView ? "play" : "setup");
+    const isActive = button.dataset.view === currentView;
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
-  if (isPlayView) {
+  if (currentView === "play") {
     updateActivePlayerBanner();
   }
 }
@@ -783,7 +997,7 @@ function updateActivePlayerBanner() {
     message = "";
   } else if (gameState.winnerId) {
     const winner = gameState.players.find((player) => player.id === gameState.winnerId);
-    message = winner ? `Leg gewonnen von ${winner.name}` : "";
+    message = winner ? `Leg gewonnen von ${winner.displayName || winner.name}` : "";
   } else if (!gameState.legActive) {
     const starter = gameState.players[gameState.activeIndex] || gameState.players[0];
     message = starter ? `Bereit: ${starter.name} startet das nächste Leg` : "";
@@ -903,3 +1117,297 @@ function uid() {
   }
   return `id-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
+
+
+
+
+
+function handleProfileSelection(select, input, fallbackName) {
+  if (!input) return;
+  const profileId = select?.value || "";
+  const profile = getProfileById(profileId);
+  if (profile) {
+    const displayName = getProfileDisplayName(profile);
+    input.value = displayName || fallbackName;
+    input.readOnly = true;
+    input.classList.add("read-only");
+  } else {
+    input.readOnly = false;
+    input.classList.remove("read-only");
+    if (fallbackName && !input.value.trim()) {
+      input.value = fallbackName;
+    }
+  }
+}
+
+function onProfileFormSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const firstName = (formData.get("firstName") || "").toString().trim();
+  const lastName = (formData.get("lastName") || "").toString().trim();
+  const nickname = (formData.get("nickname") || "").toString().trim();
+
+  if (!nickname && !firstName) {
+    notifyVoiceStatus("error", "Nickname erforderlich");
+    return;
+  }
+
+  const profile = {
+    id: uid(),
+    firstName,
+    lastName,
+    nickname,
+    image: pendingProfileImage || "",
+    stats: {
+      gamesPlayed: 0,
+      legsWon: 0,
+      totalPoints: 0,
+      totalDarts: 0,
+    },
+    history: [],
+    createdAt: Date.now(),
+  };
+
+  profiles.push(profile);
+  saveProfiles();
+  renderProfileOptions();
+  renderProfileList();
+  resetProfileForm();
+  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
+  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+}
+
+function onProfileImageChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    pendingProfileImage = null;
+    if (elements.profileImagePreview) {
+      elements.profileImagePreview.src = "";
+      elements.profileImagePreview.hidden = true;
+    }
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingProfileImage = reader.result;
+    if (elements.profileImagePreview) {
+      elements.profileImagePreview.src = pendingProfileImage;
+      elements.profileImagePreview.hidden = false;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetProfileForm(skipFields = false) {
+  pendingProfileImage = null;
+  if (!skipFields && elements.profileForm) {
+    elements.profileForm.reset();
+  }
+  if (elements.profileImageInput) {
+    elements.profileImageInput.value = "";
+  }
+  if (elements.profileImagePreview) {
+    elements.profileImagePreview.src = "";
+    elements.profileImagePreview.hidden = true;
+  }
+}
+
+function onProfileListClick(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  const profileId = button.dataset.id;
+  if (!profileId) return;
+
+  if (action === "assign") {
+    assignProfileToSlot(profileId, Number(button.dataset.slot) || 1);
+    return;
+  }
+
+  if (action === "delete") {
+    const profile = getProfileById(profileId);
+    if (!profile) return;
+    if (!window.confirm(`Profil "${profile.nickname || profile.firstName}" löschen?`)) return;
+    profiles = profiles.filter((item) => item.id !== profileId);
+    saveProfiles();
+    renderProfileOptions();
+    renderProfileList();
+    if (elements.playerOneProfileSelect?.value === profileId) {
+      elements.playerOneProfileSelect.value = "";
+      handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
+    }
+    if (elements.playerTwoProfileSelect?.value === profileId) {
+      elements.playerTwoProfileSelect.value = "";
+      handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+    }
+  }
+}
+
+function assignProfileToSlot(profileId, slot) {
+  const select = slot === 1 ? elements.playerOneProfileSelect : elements.playerTwoProfileSelect;
+  const input = slot === 1 ? elements.playerOneInput : elements.playerTwoInput;
+  const fallback = slot === 1 ? "Player 1" : "Player 2";
+  if (!select || !input) return;
+  select.value = profileId || "";
+  handleProfileSelection(select, input, fallback);
+  setViewMode("setup");
+}
+
+function loadProfiles() {
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        profiles = parsed.map((profile) => {
+          ensureProfileStats(profile);
+          return profile;
+        });
+      }
+    }
+  } catch (error) {
+    profiles = [];
+  }
+
+  renderProfileOptions();
+  renderProfileList();
+}
+
+function saveProfiles() {
+  try {
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profiles));
+  } catch (error) {
+    console.error("Profile konnten nicht gespeichert werden", error);
+  }
+}
+
+function renderProfileOptions() {
+  const defaultOption = '<option value="">Benutzerdefiniert</option>';
+  const options = profiles
+    .map((profile) => {
+      const displayName = getProfileDisplayName(profile);
+      return `<option value="${profile.id}">${displayName}</option>`;
+    })
+    .join("");
+
+  const updateSelect = (select, fallbackLabel) => {
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = defaultOption + options;
+    if (previous && profiles.some((profile) => profile.id === previous)) {
+      select.value = previous;
+    } else {
+      select.value = "";
+    }
+  };
+
+  updateSelect(elements.playerOneProfileSelect, "Player 1");
+  updateSelect(elements.playerTwoProfileSelect, "Player 2");
+
+  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
+  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+}
+
+function renderProfileList() {
+  if (!elements.profileList) return;
+  if (!profiles.length) {
+    elements.profileList.innerHTML = '<li class="profile-empty">Noch keine Profile gespeichert.</li>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  profiles
+    .slice()
+    .sort((a, b) => getProfileDisplayName(a).localeCompare(getProfileDisplayName(b)))
+    .forEach((profile) => {
+      ensureProfileStats(profile);
+      const li = document.createElement("li");
+      li.className = "profile-card";
+      li.dataset.id = profile.id;
+
+      const displayName = getProfileDisplayName(profile);
+      const fullName = `${profile.firstName} ${profile.lastName}`.trim();
+      const averagePerDart = formatAverage(profile.stats.totalPoints, profile.stats.totalDarts);
+      const averageThreeDart = formatAverage(profile.stats.totalPoints * 3, profile.stats.totalDarts);
+      const games = profile.stats.gamesPlayed;
+      const legs = profile.stats.legsWon;
+      const initial = (profile.nickname || profile.firstName || displayName || "?").charAt(0).toUpperCase();
+
+      const avatarMarkup = profile.image
+        ? `<img src="${profile.image}" alt="${displayName}" />`
+        : `<div class="profile-avatar-fallback">${initial}</div>`;
+
+      const historyEntries = (profile.history || [])
+        .slice(0, 3)
+        .map((entry) => {
+          const dateLabel = formatProfileDate(entry.date);
+          const avg = entry.darts ? formatAverage(entry.points, entry.darts) : "0.00";
+          return `<li>${dateLabel}: ${entry.points} Punkte · ${entry.darts} Darts · Ø ${avg}${entry.legWon ? " · Sieg" : ""}</li>`;
+        })
+        .join("");
+
+      li.innerHTML = `
+        ${avatarMarkup}
+        <div class="profile-info">
+          <h4>${displayName}</h4>
+          <span>${fullName || ""}</span>
+          <p class="profile-stats">Spiele: ${games} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${
+        profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
+      }</p>
+          ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
+          <div class="profile-actions-inline">
+            <button type="button" class="ghost" data-action="assign" data-slot="1" data-id="${profile.id}">Als Spieler 1 wählen</button>
+            <button type="button" class="ghost" data-action="assign" data-slot="2" data-id="${profile.id}">Als Spieler 2 wählen</button>
+            <button type="button" class="ghost danger" data-action="delete" data-id="${profile.id}">Löschen</button>
+          </div>
+        </div>
+      `;
+
+      fragment.appendChild(li);
+    });
+
+  elements.profileList.innerHTML = "";
+  elements.profileList.appendChild(fragment);
+}
+
+function getProfileById(id) {
+  if (!id) return null;
+  return profiles.find((profile) => profile.id === id) || null;
+}
+
+function getProfileDisplayName(profile) {
+  if (!profile) return "";
+  const nickname = (profile.nickname || "").trim();
+  if (nickname) return nickname;
+  return `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || "Unbenannt";
+}
+
+function ensureProfileStats(profile) {
+  profile.stats = profile.stats || {};
+  profile.stats.gamesPlayed = profile.stats.gamesPlayed || 0;
+  profile.stats.legsWon = profile.stats.legsWon || 0;
+  profile.stats.totalPoints = profile.stats.totalPoints || 0;
+  profile.stats.totalDarts = profile.stats.totalDarts || 0;
+  profile.history = profile.history || [];
+}
+
+function formatAverage(points, darts) {
+  if (!darts) return "0.00";
+  return Number(points / darts).toFixed(2);
+}
+
+function formatProfileDate(value) {
+  if (!value) return "";
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("de-DE", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(date);
+  } catch (error) {
+    return "";
+  }
+}
+
+

@@ -12,10 +12,11 @@
   <header class="app-header">
     <h1>Darts Voice Prototype</h1>
     <p class="tagline">Sprich deine Würfe - die App protokolliert das Leg.</p>
-    <div class="view-toggle" role="group" aria-label="Ansicht wählen">
-      <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
-      <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
-    </div>
+      <div class="view-toggle" role="group" aria-label="Ansicht wählen">
+        <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
+        <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+        <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
+      </div>
   </header>
 
   <main class="app-main">
@@ -23,12 +24,38 @@
       <h2 id="setup-title">Spiel konfigurieren</h2>
       <form id="setup-form" class="setup-form">
         <div class="form-row">
-          <label for="player-one">Spieler 1</label>
-          <input id="player-one" name="playerOne" type="text" value="Player 1" required />
+          <label for="player-one-profile">Spieler 1 Profil</label>
+          <select id="player-one-profile" name="playerOneProfile">
+            <option value="">Benutzerdefiniert</option>
+          </select>
         </div>
         <div class="form-row">
-          <label for="player-two">Spieler 2</label>
-          <input id="player-two" name="playerTwo" type="text" value="Player 2" required />
+          <label for="player-one">Spieler 1 Name</label>
+          <input
+            id="player-one"
+            name="playerOne"
+            type="text"
+            value="Player 1"
+            autocomplete="off"
+            required
+          />
+        </div>
+        <div class="form-row">
+          <label for="player-two-profile">Spieler 2 Profil</label>
+          <select id="player-two-profile" name="playerTwoProfile">
+            <option value="">Benutzerdefiniert</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="player-two">Spieler 2 Name</label>
+          <input
+            id="player-two"
+            name="playerTwo"
+            type="text"
+            value="Player 2"
+            autocomplete="off"
+            required
+          />
         </div>
         <div class="form-row">
           <label for="starting-score">Startscore</label>
@@ -206,6 +233,41 @@
       <h2 id="history-title">Verlauf</h2>
       <ul id="history-log" class="history-log"></ul>
     </section>
+
+    <section class="card profile-manager" aria-labelledby="profile-title">
+      <h2 id="profile-title">Spielerprofile</h2>
+      <form id="profile-form" class="profile-form">
+        <div class="profile-form-grid">
+          <div class="form-row">
+            <label for="profile-first-name">Vorname</label>
+            <input id="profile-first-name" name="firstName" type="text" autocomplete="off" required />
+          </div>
+          <div class="form-row">
+            <label for="profile-last-name">Nachname</label>
+            <input id="profile-last-name" name="lastName" type="text" autocomplete="off" required />
+          </div>
+          <div class="form-row">
+            <label for="profile-nickname">Spitzname (Anzeige am Scoreboard)</label>
+            <input id="profile-nickname" name="nickname" type="text" autocomplete="off" required />
+          </div>
+          <div class="form-row">
+            <label for="profile-image">Profilbild</label>
+            <input id="profile-image" name="image" type="file" accept="image/*" />
+          </div>
+        </div>
+        <div class="profile-image-preview">
+          <img id="profile-image-preview" alt="Profilbild Vorschau" hidden />
+        </div>
+        <div class="form-actions profile-actions">
+          <button type="submit" class="primary">Profil speichern</button>
+          <button type="reset" id="profile-reset" class="ghost">Zurücksetzen</button>
+        </div>
+      </form>
+      <div class="profile-list-container">
+        <h3>Gespeicherte Profile</h3>
+        <ul id="profile-list" class="profile-list"></ul>
+      </div>
+    </section>
   </main>
 
   <footer class="app-footer">
@@ -214,8 +276,17 @@
 
   <template id="scoreboard-item-template">
     <article class="player-card">
-      <header>
-        <h3 class="player-name"></h3>
+      <header class="player-header">
+        <div class="player-identity">
+          <div class="player-avatar-wrapper">
+            <img class="player-avatar" alt="" hidden />
+            <span class="player-avatar-fallback" aria-hidden="true">?</span>
+          </div>
+          <div class="player-name-wrapper">
+            <h3 class="player-name"></h3>
+            <p class="player-meta"></p>
+          </div>
+        </div>
         <span class="player-indicator" aria-hidden="true">●</span>
       </header>
       <dl class="player-stats">
