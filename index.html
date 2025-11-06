@@ -267,71 +267,11 @@
           <button type="button" class="dart-mode-button" data-multiplier="3">Triple</button>
         </div>
         <div id="dart-picker" class="dart-picker" aria-label="Dart-Schnellauswahl für Single, Double, Triple und Bull">
-          <div class="dart-grid dart-numbers">
-            <button class="dart-button dart-number" data-number="0">
-              <span class="value">0</span>
-            </button>
-            <button class="dart-button dart-number" data-number="1">
-              <span class="value">1</span>
-            </button>
-            <button class="dart-button dart-number" data-number="2">
-              <span class="value">2</span>
-            </button>
-            <button class="dart-button dart-number" data-number="3">
-              <span class="value">3</span>
-            </button>
-            <button class="dart-button dart-number" data-number="4">
-              <span class="value">4</span>
-            </button>
-            <button class="dart-button dart-number" data-number="5">
-              <span class="value">5</span>
-            </button>
-            <button class="dart-button dart-number" data-number="6">
-              <span class="value">6</span>
-            </button>
-            <button class="dart-button dart-number" data-number="7">
-              <span class="value">7</span>
-            </button>
-            <button class="dart-button dart-number" data-number="8">
-              <span class="value">8</span>
-            </button>
-            <button class="dart-button dart-number" data-number="9">
-              <span class="value">9</span>
-            </button>
-            <button class="dart-button dart-number" data-number="10">
-              <span class="value">10</span>
-            </button>
-            <button class="dart-button dart-number" data-number="11">
-              <span class="value">11</span>
-            </button>
-            <button class="dart-button dart-number" data-number="12">
-              <span class="value">12</span>
-            </button>
-            <button class="dart-button dart-number" data-number="13">
-              <span class="value">13</span>
-            </button>
-            <button class="dart-button dart-number" data-number="14">
-              <span class="value">14</span>
-            </button>
-            <button class="dart-button dart-number" data-number="15">
-              <span class="value">15</span>
-            </button>
-            <button class="dart-button dart-number" data-number="16">
-              <span class="value">16</span>
-            </button>
-            <button class="dart-button dart-number" data-number="17">
-              <span class="value">17</span>
-            </button>
-            <button class="dart-button dart-number" data-number="18">
-              <span class="value">18</span>
-            </button>
-            <button class="dart-button dart-number" data-number="19">
-              <span class="value">19</span>
-            </button>
-            <button class="dart-button dart-number" data-number="20">
-              <span class="value">20</span>
-            </button>
+          <div class="dart-number-order" role="group" aria-label="Zahlenanordnung">
+            <button type="button" class="dart-number-order-btn active" data-order="sequential">Zahlenfolge</button>
+            <button type="button" class="dart-number-order-btn" data-order="board">Board-Nachbarn</button>
           </div>
+          <div id="dart-number-grid" class="dart-grid dart-numbers" aria-label="Zahlenfelder"></div>
           <div class="dart-grid dart-bull">
             <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1"
               data-double="false">

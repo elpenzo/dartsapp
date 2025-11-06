@@ -6,6 +6,34 @@ const MULTIPLIER_CONFIG = {
   2: { label: "Double", short: "D", isDouble: true },
   3: { label: "Triple", short: "T", isDouble: false },
 };
+const DART_NUMBER_SEQUENTIAL_ORDER = Array.from({ length: 21 }, (_, index) => index);
+const DART_NUMBER_BOARD_ORDER = [
+  0,
+  1,
+  20,
+  5,
+  12,
+  9,
+  14,
+  11,
+  8,
+  16,
+  7,
+  19,
+  3,
+  17,
+  2,
+  15,
+  10,
+  6,
+  13,
+  4,
+  18,
+];
+const DART_NUMBER_ORDERS = {
+  sequential: DART_NUMBER_SEQUENTIAL_ORDER,
+  board: DART_NUMBER_BOARD_ORDER,
+};
 const OUT_MODE_LABELS = {
   double: "Double Out",
   single: "Single Out",
@@ -56,6 +84,8 @@ const elements = {
   manualCommitBtn: document.getElementById("manual-commit"),
   manualBustBtn: document.getElementById("manual-bust"),
   dartPicker: document.getElementById("dart-picker"),
+  dartNumberGrid: document.getElementById("dart-number-grid"),
+  dartNumberOrderButtons: Array.from(document.querySelectorAll(".dart-number-order-btn")),
   template: document.getElementById("scoreboard-item-template"),
   startingScoreSelect: document.getElementById("starting-score"),
   outModeSelect: document.getElementById("out-mode"),
@@ -139,6 +169,7 @@ const gameState = {
   winnerId: null,
   snapshots: [],
   dartMultiplier: 1,
+  dartNumberOrder: "sequential",
   viewMode: "setup",
   statsCommitted: false,
   leaderboardSort: "average",
@@ -441,6 +472,11 @@ async function initialize() {
   if (elements.comboButtons.length) {
     elements.comboButtons.forEach((button) => {
       button.addEventListener("click", () => applyCombo(button.dataset.combo));
+    });
+  }
+  if (elements.dartNumberOrderButtons?.length) {
+    elements.dartNumberOrderButtons.forEach((button) => {
+      button.addEventListener("click", () => setDartNumberOrder(button.dataset.order || "sequential"));
     });
   }
   if (elements.leaderboardSortButtons.length) {
@@ -1579,7 +1615,52 @@ function requiresDoubleCheckout() {
   return gameState.outMode === "double";
 }
 
+function updateDartNumberOrderButtons() {
+  if (!elements.dartNumberOrderButtons?.length) return;
+  elements.dartNumberOrderButtons.forEach((button) => {
+    const targetOrder = button.dataset.order || "sequential";
+    const isActive = targetOrder === gameState.dartNumberOrder;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function setDartNumberOrder(order) {
+  const normalized = typeof order === "string" && DART_NUMBER_ORDERS[order] ? order : "sequential";
+  if (gameState.dartNumberOrder === normalized) return;
+  gameState.dartNumberOrder = normalized;
+  updateDartNumberOrderButtons();
+  renderDartNumberButtons();
+  updateDartNumberButtons();
+  setupDartSwipeGestures();
+}
+
+function renderDartNumberButtons() {
+  const container = elements.dartNumberGrid;
+  if (!container) return;
+  container.innerHTML = "";
+
+  const order = DART_NUMBER_ORDERS[gameState.dartNumberOrder] || DART_NUMBER_ORDERS.sequential;
+  order.forEach((value) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dart-button dart-number";
+    button.dataset.number = String(value);
+
+    const valueNode = document.createElement("span");
+    valueNode.className = "value";
+    valueNode.textContent = String(value);
+    button.appendChild(valueNode);
+
+    container.appendChild(button);
+  });
+
+  elements.dartNumberButtons = Array.from(container.querySelectorAll(".dart-number"));
+}
+
 function initializeDartPicker() {
+  renderDartNumberButtons();
+  updateDartNumberOrderButtons();
   gameState.dartMultiplier = MULTIPLIER_CONFIG[gameState.dartMultiplier] ? gameState.dartMultiplier : 1;
   updateDartModeButtons();
   updateDartNumberButtons();

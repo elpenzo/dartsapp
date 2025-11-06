@@ -1109,6 +1109,40 @@ body:not(.sets-mode) .player-legs-wrapper {
   gap: 0.5rem;
 }
 
+.dart-number-order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.dart-number-order-btn {
+  border-radius: 999px;
+  border: 1px solid var(--surface-border);
+  background: transparent;
+  padding: 0.45rem 1rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dart-number-order-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.dart-number-order-btn:not(.active):hover {
+  background: rgba(36, 85, 245, 0.08);
+  border-color: rgba(36, 85, 245, 0.4);
+}
+
+.dart-number-order-btn:focus-visible {
+  outline: 3px solid rgba(36, 85, 245, 0.35);
+  outline-offset: 2px;
+}
+
 .combo-button {
   border-radius: 10px;
   border: 1px solid rgba(36, 85, 245, 0.2);
