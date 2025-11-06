@@ -67,6 +67,7 @@ const elements = {
   gameSettings: document.getElementById("game-settings"),
   activePlayerBanner: document.getElementById("active-player-banner"),
   scoreboardCard: document.querySelector(".scoreboard"),
+  scoreboardHeatmap: document.getElementById("scoreboard-heatmap"),
   undoBtn: document.getElementById("undo-btn"),
   dartModeSwitch: document.querySelector(".dart-mode-switch"),
   dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
@@ -1287,6 +1288,7 @@ function renderScoreboard() {
   });
 
   updateActivePlayerBanner();
+  renderActivePlayerHeatmap();
 }
 
 function getCheckoutSuggestion(score, outMode = gameState.outMode) {
@@ -1318,6 +1320,42 @@ function computeCheckoutSuggestion(score, requiresDouble) {
     return "";
   }
   return combos[0].map((shot) => shot.display).join(" · ");
+}
+
+function renderActivePlayerHeatmap() {
+  const container = elements.scoreboardHeatmap;
+  if (!container) return;
+
+  if (gameState.viewMode !== "play") {
+    container.hidden = true;
+    return;
+  }
+
+  const activePlayer = gameState.players[gameState.activeIndex];
+  if (!activePlayer) {
+    container.hidden = false;
+    container.innerHTML = '<p class="heatmap-empty">Kein Spieler aktiv.</p>';
+    return;
+  }
+
+  const displayName = getPlayerDisplayName(activePlayer) || `Spieler ${gameState.activeIndex + 1}`;
+  const histogram = activePlayer.dartHitsThisGame || createEmptyHistogram();
+  const heatmapMarkup = generateProfileHeatmapMarkup({
+    stats: { dartHistogram: histogram },
+  });
+
+  if (!heatmapMarkup) {
+    container.hidden = false;
+    container.innerHTML = `<p class="heatmap-empty">Noch keine Treffer für ${displayName}.</p>`;
+    return;
+  }
+
+  container.hidden = false;
+  container.innerHTML = heatmapMarkup;
+  const titleNode = container.querySelector(".profile-heatmap-title");
+  if (titleNode) {
+    titleNode.textContent = `Trefferheatmap – ${displayName}`;
+  }
 }
 
 function findCheckoutCombos(target, requiresDouble) {
@@ -1881,6 +1919,13 @@ function updateViewModeUI() {
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
+  if (elements.scoreboardHeatmap) {
+    if (currentView === "play") {
+      renderActivePlayerHeatmap();
+    } else {
+      elements.scoreboardHeatmap.hidden = true;
+    }
+  }
   if (currentView === "play") {
     updateActivePlayerBanner();
   } else if (currentView === "tournament") {
