@@ -486,8 +486,29 @@ h3 {
 
 .tournament-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0.75rem 1rem;
+}
+
+.tournament-player-row {
+  gap: 0.35rem;
+}
+
+.tournament-player-fields {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tournament-player-fields input {
+  flex: 1 1 auto;
+  min-width: 140px;
+}
+
+.tournament-player-fields select {
+  flex: 0 1 45%;
+  min-width: 130px;
 }
 
 .tournament-grid .form-row {

@@ -77,6 +77,7 @@ const elements = {
   tournamentForm: document.getElementById("tournament-form"),
   tournamentResetBtn: document.getElementById("tournament-reset"),
   tournamentMatchModeSelect: document.getElementById("tournament-match-mode"),
+  tournamentPlayerSelects: Array.from(document.querySelectorAll(".tournament-player-select")),
   tournamentPlayerInputs: Array.from(document.querySelectorAll(".tournament-player-input")),
   tournamentStatus: document.getElementById("tournament-status"),
   tournamentBracket: document.getElementById("tournament-bracket"),
@@ -401,6 +402,26 @@ async function initialize() {
   }
   if (elements.tournamentResetBtn) {
     elements.tournamentResetBtn.addEventListener("click", resetTournamentForm);
+  }
+  if (elements.tournamentPlayerSelects.length) {
+    elements.tournamentPlayerSelects.forEach((select, index) => {
+      if (!select.dataset.slot) {
+        select.dataset.slot = String(index + 1);
+      }
+      select.addEventListener("change", () => onTournamentProfileSelectChange(index));
+    });
+    elements.tournamentPlayerSelects.forEach((_, index) => {
+      syncTournamentPlayerField(index);
+    });
+  }
+  if (elements.tournamentPlayerInputs.length) {
+    elements.tournamentPlayerInputs.forEach((input) => {
+      input.addEventListener("input", () => {
+        if (input.dataset.autofill === "true" && input.value.trim()) {
+          delete input.dataset.autofill;
+        }
+      });
+    });
   }
   if (elements.dartPicker) {
     initializeDartPicker();
@@ -1832,6 +1853,36 @@ function handleProfileSelection(select, input, fallbackName) {
   }
 }
 
+function syncTournamentPlayerField(slotIndex) {
+  const inputs = elements.tournamentPlayerInputs || [];
+  const selects = elements.tournamentPlayerSelects || [];
+  const input = inputs[slotIndex];
+  const select = selects[slotIndex];
+  if (!input || !select) return;
+
+  const profileId = select.value || "";
+  const profile = getProfileById(profileId);
+
+  if (profile) {
+    const displayName = getProfileDisplayName(profile);
+    if (!input.value.trim() || input.dataset.autofill === "true") {
+      input.value = displayName;
+      input.dataset.autofill = "true";
+    }
+    input.placeholder = displayName;
+  } else {
+    if (input.dataset.autofill === "true") {
+      input.value = "";
+    }
+    input.placeholder = "";
+    delete input.dataset.autofill;
+  }
+}
+
+function onTournamentProfileSelectChange(slotIndex) {
+  syncTournamentPlayerField(slotIndex);
+}
+
 function onProfileFormSubmit(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
@@ -1999,7 +2050,7 @@ function renderProfileOptions() {
     })
     .join("");
 
-  const updateSelect = (select, fallbackLabel) => {
+  const updateSelect = (select) => {
     if (!select) return;
     const previous = select.value;
     select.innerHTML = defaultOption + options;
@@ -2010,8 +2061,15 @@ function renderProfileOptions() {
     }
   };
 
-  updateSelect(elements.playerOneProfileSelect, "Player 1");
-  updateSelect(elements.playerTwoProfileSelect, "Player 2");
+  updateSelect(elements.playerOneProfileSelect);
+  updateSelect(elements.playerTwoProfileSelect);
+
+  if (Array.isArray(elements.tournamentPlayerSelects)) {
+    elements.tournamentPlayerSelects.forEach((select, index) => {
+      updateSelect(select);
+      syncTournamentPlayerField(index);
+    });
+  }
 
   handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
   handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
@@ -2275,26 +2333,48 @@ function resetTournamentForm() {
     return;
   }
   clearTournamentMatchTimer();
-  if (Array.isArray(elements.tournamentPlayerInputs)) {
-    elements.tournamentPlayerInputs.forEach((input) => {
-      if (input) {
-        input.value = "";
-      }
-    });
-  }
+  const inputs = elements.tournamentPlayerInputs || [];
+  inputs.forEach((input) => {
+    if (!input) return;
+    input.value = "";
+    input.placeholder = "";
+    delete input.dataset.autofill;
+  });
+  const selects = elements.tournamentPlayerSelects || [];
+  selects.forEach((select) => {
+    if (!select) return;
+    select.value = "";
+  });
+  selects.forEach((_, index) => {
+    syncTournamentPlayerField(index);
+  });
   gameState.tournament = createInitialTournamentState();
   renderTournamentBracket();
   setTournamentStatus("Kein Turnier aktiv.", "idle");
 }
 
 function collectTournamentPlayerEntries() {
-  if (!Array.isArray(elements.tournamentPlayerInputs)) return [];
-  return elements.tournamentPlayerInputs
-    .map((input, index) => ({
-      name: typeof input?.value === "string" ? input.value.trim() : "",
-      seed: index + 1,
-    }))
-    .filter((entry) => entry.name.length);
+  const inputs = elements.tournamentPlayerInputs || [];
+  const selects = elements.tournamentPlayerSelects || [];
+  const entries = [];
+
+  for (let i = 0; i < MAX_TOURNAMENT_PLAYERS; i += 1) {
+    const input = inputs[i];
+    const select = selects[i];
+    const rawName = typeof input?.value === "string" ? input.value.trim() : "";
+    const profileId = select?.value || "";
+    const profile = profileId ? getProfileById(profileId) : null;
+    const name = rawName || (profile ? getProfileDisplayName(profile) : "");
+    if (!name) continue;
+    entries.push({
+      name,
+      seed: i + 1,
+      profileId,
+      participantIndex: i,
+    });
+  }
+
+  return entries;
 }
 
 function onTournamentSubmit(event) {
@@ -2309,6 +2389,8 @@ function onTournamentSubmit(event) {
     id: `tp${index + 1}`,
     name: entry.name,
     seed: entry.seed,
+    profileId: entry.profileId || "",
+    sourceIndex: entry.participantIndex,
   }));
 
   const matchModeValue = elements.tournamentMatchModeSelect?.value;
@@ -2391,8 +2473,22 @@ function buildTournamentStructure(players) {
         id: `${roundDef.id}-${matches.length + 1}`,
         roundId: roundDef.id,
         players: [
-          first ? { participantId: first.id, name: first.name, seed: first.seed } : null,
-          second ? { participantId: second.id, name: second.name, seed: second.seed } : null,
+          first
+            ? {
+                participantId: first.id,
+                name: first.name,
+                seed: first.seed,
+                profileId: first.profileId || "",
+              }
+            : null,
+          second
+            ? {
+                participantId: second.id,
+                name: second.name,
+                seed: second.seed,
+                profileId: second.profileId || "",
+              }
+            : null,
         ],
         winnerId: null,
         status: first || second ? "pending" : "empty",
@@ -2419,6 +2515,7 @@ function buildTournamentStructure(players) {
             participantId: existingSlot.participantId || null,
             name: existingSlot.name || "",
             seed: existingSlot.seed || null,
+            profileId: existingSlot.profileId || "",
             sourceMatchId: prevMatch.id,
           };
         } else {
@@ -2426,6 +2523,7 @@ function buildTournamentStructure(players) {
             participantId: null,
             name: "",
             seed: null,
+            profileId: "",
             sourceMatchId: prevMatch.id,
           };
         }
@@ -2529,7 +2627,15 @@ function getTournamentMatchById(tournament, matchId) {
 function getTournamentPlayerName(tournament, participantId) {
   if (!participantId) return "Unbekannt";
   const participant = getTournamentParticipant(tournament, participantId);
-  return participant ? participant.name : "Unbekannt";
+  if (!participant) return "Unbekannt";
+  if (participant.profileId) {
+    const profile = getProfileById(participant.profileId);
+    if (profile) {
+      const displayName = getProfileDisplayName(profile);
+      if (displayName) return displayName;
+    }
+  }
+  return participant.name || "Unbekannt";
 }
 
 function propagateTournamentWinner(tournament, match, winnerId) {
@@ -2549,8 +2655,13 @@ function propagateTournamentWinner(tournament, match, winnerId) {
 
   const participant = getTournamentParticipant(tournament, winnerId);
   const payload = participant
-    ? { participantId: participant.id, name: participant.name, seed: participant.seed }
-    : { participantId: winnerId, name: "Unbekannt", seed: null };
+    ? {
+        participantId: participant.id,
+        name: participant.name,
+        seed: participant.seed,
+        profileId: participant.profileId || "",
+      }
+    : { participantId: winnerId, name: "Unbekannt", seed: null, profileId: "" };
 
   if (!Array.isArray(targetMatch.players)) {
     targetMatch.players = [null, null];
@@ -2681,7 +2792,8 @@ function renderTournamentBracket() {
           }
           slotEl.className = slotClass;
           const nameSpan = document.createElement("span");
-          nameSpan.textContent = slot.name || "Teilnehmer";
+          const slotName = getTournamentPlayerName(tournament, slot.participantId) || slot.name || "Teilnehmer";
+          nameSpan.textContent = slotName;
           slotEl.appendChild(nameSpan);
           if (slot.seed) {
             const seedSpan = document.createElement("span");
@@ -2731,16 +2843,23 @@ function launchTournamentMatch(target) {
 
   const playerConfigs = match.players.map((slot, index) => {
     const participant = slot?.participantId ? getTournamentParticipant(tournament, slot.participantId) : null;
-    const name = slot?.name || participant?.name || `Spieler ${index + 1}`;
+    const participantName = participant?.name;
+    const name = slot?.name || participantName || `Spieler ${index + 1}`;
     return {
       name,
-      profileId: "",
+      profileId: participant?.profileId || slot?.profileId || "",
       tournamentPlayerId: slot?.participantId || null,
       tournamentSeed: participant?.seed || slot?.seed || null,
     };
   });
 
-  const matchupLabel = playerConfigs.map((config) => config.name).join(" vs ");
+  const matchupLabel = match.players
+    .map((slot, index) =>
+      slot?.participantId
+        ? getTournamentPlayerName(tournament, slot.participantId)
+        : playerConfigs[index]?.name || `Spieler ${index + 1}`
+    )
+    .join(" vs ");
   const roundLabel = round?.label || "Match";
   setTournamentStatus(`${roundLabel}: ${matchupLabel}`, "in-progress");
 
@@ -2799,7 +2918,9 @@ function handleTournamentMatchCompletion(winningPlayer) {
     const nextRound = tournament.rounds[nextMatch.roundIndex];
     const nextMatchRef = nextRound?.matches?.[nextMatch.matchIndex];
     const playersLabel = nextMatchRef?.players
-      ?.map((slot) => (slot?.participantId ? slot.name : "Freilos"))
+      ?.map((slot) =>
+        slot?.participantId ? getTournamentPlayerName(tournament, slot.participantId) : "Freilos"
+      )
       .join(" vs ") || "Freilos";
     setTournamentStatus(`${nextRound?.label || "Match"}: ${playersLabel}`, "pending");
 

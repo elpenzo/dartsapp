@@ -125,11 +125,9 @@ function applyDart(gameState, dartResult) {
 ## N├ñchste Schritte
 - Turniermodus
 - Sprachsteuerung starten per Codewort (Spielername 1,20,Triple 1)
-- Checkout Vorschl├ñge
+- Checkout Vorschläge
 - Heatmap pro Spieler
 - Soundeffekte 180
-- Darkmode
-- TastaturEingabe
 - Match- & Turnierverwaltung
 
 Freies Match: Spieler w├ñhlbar
