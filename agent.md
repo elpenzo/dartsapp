@@ -125,11 +125,9 @@ function applyDart(gameState, dartResult) {
 ## N├ñchste Schritte
 - Turniermodus
 - Sprachsteuerung starten per Codewort (Spielername 1,20,Triple 1)
-- Checkout Vorschläge
-- Heatmap pro Spieler
 - Soundeffekte 180
 - Match- & Turnierverwaltung
-- bei leg starten automatisch auf die Spielansicht springen
+
 
 
 Ligamodus: Jeder gegen jeden (Round Robin)
