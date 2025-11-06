@@ -1156,7 +1156,12 @@ function updateDartNumberButtons() {
     const base = parseInt(button.dataset.number || "0", 10);
     const score = base * gameState.dartMultiplier;
     const disabled = base === 0 && gameState.dartMultiplier !== 1;
-    const label = base === 0 ? "0" : `${config.short}${base}`;
+    const label =
+      base === 0
+        ? "0"
+        : gameState.dartMultiplier === 1
+        ? `${base}`
+        : `${config.short}${base}`;
     const readable = base === 0 ? "0" : `${config.label} ${base}`;
 
     button.dataset.label = label;
@@ -1164,13 +1169,16 @@ function updateDartNumberButtons() {
     button.dataset.score = String(score);
     button.dataset.multiplier = String(gameState.dartMultiplier);
     button.dataset.double = String(config.isDouble && base !== 0);
+    if (base > 0) {
+      button.dataset.swipeLeft = "\u2190 T";
+      button.dataset.swipeRight = "D \u2192";
+    } else {
+      delete button.dataset.swipeLeft;
+      delete button.dataset.swipeRight;
+    }
     button.disabled = disabled;
 
-    const abbrNode = button.querySelector(".abbr");
     const valueNode = button.querySelector(".value");
-    if (abbrNode) {
-      abbrNode.textContent = label;
-    }
     if (valueNode) {
       valueNode.textContent = String(score);
     }

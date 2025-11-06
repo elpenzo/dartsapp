@@ -1037,6 +1037,39 @@ body:not(.sets-mode) .player-legs-wrapper {
   touch-action: pan-y;
 }
 
+.dart-number {
+  position: relative;
+  padding-bottom: 1.55rem;
+}
+
+.dart-number::before,
+.dart-number::after {
+  position: absolute;
+  bottom: 0.2rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 0.95;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+
+.dart-number::before {
+  content: attr(data-swipe-left);
+  left: 0.25rem;
+}
+
+.dart-number::after {
+  content: attr(data-swipe-right);
+  right: 0.25rem;
+}
+
+.dart-number .value {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .dart-button:hover {
   background: rgba(36, 85, 245, 0.18);
   border-color: rgba(36, 85, 245, 0.45);
