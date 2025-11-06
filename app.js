@@ -7,7 +7,7 @@ const MULTIPLIER_CONFIG = {
   3: { label: "Triple", short: "T", isDouble: false },
 };
 const DART_NUMBER_SEQUENTIAL_ORDER = Array.from({ length: 21 }, (_, index) => index);
-const DART_NUMBER_BOARD_ORDER = [
+const DART_NUMBER_ADJACENT_ORDER = [
   0,
   1,
   20,
@@ -32,8 +32,9 @@ const DART_NUMBER_BOARD_ORDER = [
 ];
 const DART_NUMBER_ORDERS = {
   sequential: DART_NUMBER_SEQUENTIAL_ORDER,
-  board: DART_NUMBER_BOARD_ORDER,
+  adjacent: DART_NUMBER_ADJACENT_ORDER,
 };
+const DARTBOARD_NUMBERS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 const OUT_MODE_LABELS = {
   double: "Double Out",
   single: "Single Out",
@@ -84,6 +85,7 @@ const elements = {
   manualCommitBtn: document.getElementById("manual-commit"),
   manualBustBtn: document.getElementById("manual-bust"),
   dartPicker: document.getElementById("dart-picker"),
+  dartboardPicker: document.getElementById("dartboard-picker"),
   dartNumberGrid: document.getElementById("dart-number-grid"),
   dartNumberOrderButtons: Array.from(document.querySelectorAll(".dart-number-order-btn")),
   template: document.getElementById("scoreboard-item-template"),
@@ -466,6 +468,9 @@ async function initialize() {
     initializeDartPicker();
     elements.dartPicker.addEventListener("click", onDartPickerClick);
   }
+  if (elements.dartboardPicker) {
+    elements.dartboardPicker.addEventListener("click", onDartboardPickerClick);
+  }
   if (elements.dartModeSwitch) {
     elements.dartModeSwitch.addEventListener("click", onDartModeClick);
   }
@@ -822,6 +827,29 @@ function onDartPickerClick(event) {
     readable,
     dart: {
       label: label || `${score}`,
+      score,
+      isDouble,
+      multiplier,
+    },
+  });
+}
+
+function onDartboardPickerClick(event) {
+  if (!gameState.legActive) return;
+  const segment = event.target.closest("[data-dart-segment]");
+  if (!segment || segment.hasAttribute("hidden")) return;
+
+  const score = parseInt(segment.dataset.score || "0", 10);
+  const multiplier = parseInt(segment.dataset.multiplier || "1", 10);
+  const readable = segment.dataset.readable || segment.dataset.label || segment.textContent || "";
+  const label = segment.dataset.label || readable || `${score}`;
+  const isDouble = segment.dataset.double === "true";
+
+  applyDart({
+    type: "dart",
+    readable,
+    dart: {
+      label,
       score,
       isDouble,
       multiplier,
@@ -1615,6 +1643,12 @@ function requiresDoubleCheckout() {
   return gameState.outMode === "double";
 }
 
+function normalizeDartPickerMode(order) {
+  if (order === "dartboard") return "dartboard";
+  if (typeof order === "string" && DART_NUMBER_ORDERS[order]) return order;
+  return "sequential";
+}
+
 function updateDartNumberOrderButtons() {
   if (!elements.dartNumberOrderButtons?.length) return;
   elements.dartNumberOrderButtons.forEach((button) => {
@@ -1626,13 +1660,11 @@ function updateDartNumberOrderButtons() {
 }
 
 function setDartNumberOrder(order) {
-  const normalized = typeof order === "string" && DART_NUMBER_ORDERS[order] ? order : "sequential";
+  const normalized = normalizeDartPickerMode(order);
   if (gameState.dartNumberOrder === normalized) return;
   gameState.dartNumberOrder = normalized;
   updateDartNumberOrderButtons();
-  renderDartNumberButtons();
-  updateDartNumberButtons();
-  setupDartSwipeGestures();
+  updateDartPickerView();
 }
 
 function renderDartNumberButtons() {
@@ -1658,13 +1690,214 @@ function renderDartNumberButtons() {
   elements.dartNumberButtons = Array.from(container.querySelectorAll(".dart-number"));
 }
 
+function renderDartboardPicker() {
+  const container = elements.dartboardPicker;
+  if (!container || container.dataset.rendered === "true") return;
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", "-210 -210 420 420");
+  svg.setAttribute("role", "group");
+  svg.setAttribute("aria-label", "Virtuelles Dartboard");
+
+  const background = document.createElementNS(svgNS, "circle");
+  background.setAttribute("cx", "0");
+  background.setAttribute("cy", "0");
+  background.setAttribute("r", "206");
+  background.setAttribute("fill", "#0f172a");
+  svg.appendChild(background);
+
+  const doubleColors = ["#d64045", "#4ca16b"];
+  const tripleColors = ["#d64045", "#4ca16b"];
+  const singleColors = ["#1f2937", "#15202b"];
+  const innerSingleColors = ["#273447", "#1c2433"];
+
+  const radii = {
+    doubleOuter: 200,
+    doubleInner: 173,
+    singleOuterOuter: 171,
+    singleOuterInner: 113,
+    tripleOuter: 111,
+    tripleInner: 93,
+    singleInnerOuter: 91,
+    singleInnerInner: 45,
+    outerBull: 20,
+    innerBull: 7,
+  };
+
+  const segmentAngle = 360 / DARTBOARD_NUMBERS.length;
+  const halfAngle = segmentAngle / 2;
+
+  DARTBOARD_NUMBERS.forEach((number, index) => {
+    const startAngle = -halfAngle + index * segmentAngle;
+    const endAngle = startAngle + segmentAngle;
+    const colorIndex = index % 2;
+
+    const segments = [
+      {
+        ring: ["doubleOuter", "doubleInner"],
+        fill: doubleColors[colorIndex],
+        className: "dartboard-segment double",
+        multiplier: 2,
+        readable: `Double ${number}`,
+        label: `D${number}`,
+      },
+      {
+        ring: ["singleOuterOuter", "singleOuterInner"],
+        fill: singleColors[colorIndex],
+        className: "dartboard-segment single outer",
+        multiplier: 1,
+        readable: `Single ${number}`,
+        label: `S${number}`,
+      },
+      {
+        ring: ["tripleOuter", "tripleInner"],
+        fill: tripleColors[colorIndex],
+        className: "dartboard-segment triple",
+        multiplier: 3,
+        readable: `Triple ${number}`,
+        label: `T${number}`,
+      },
+      {
+        ring: ["singleInnerOuter", "singleInnerInner"],
+        fill: innerSingleColors[colorIndex],
+        className: "dartboard-segment single inner",
+        multiplier: 1,
+        readable: `Single ${number}`,
+        label: `S${number}`,
+      },
+    ];
+
+    segments.forEach(({ ring, fill, className, multiplier, readable, label }) => {
+      const [outerKey, innerKey] = ring;
+      const path = document.createElementNS(svgNS, "path");
+      path.setAttribute("d", createRingPath(radii[outerKey], radii[innerKey], startAngle, endAngle));
+      path.setAttribute("fill", fill);
+      path.setAttribute("class", className);
+      path.dataset.dartSegment = "true";
+      path.dataset.number = String(number);
+      path.dataset.multiplier = String(multiplier);
+      path.dataset.score = String(number * multiplier);
+      path.dataset.label = label;
+      path.dataset.readable = readable;
+      path.dataset.double = String(multiplier === 2);
+      svg.appendChild(path);
+    });
+  });
+
+  const outerBull = document.createElementNS(svgNS, "circle");
+  outerBull.setAttribute("cx", "0");
+  outerBull.setAttribute("cy", "0");
+  outerBull.setAttribute("r", String(radii.outerBull));
+  outerBull.setAttribute("class", "dartboard-bull outer");
+  outerBull.setAttribute("fill", "#438767");
+  outerBull.dataset.dartSegment = "true";
+  outerBull.dataset.number = "25";
+  outerBull.dataset.multiplier = "1";
+  outerBull.dataset.score = "25";
+  outerBull.dataset.label = "SB";
+  outerBull.dataset.readable = "Single Bull";
+  outerBull.dataset.double = "false";
+  svg.appendChild(outerBull);
+
+  const innerBull = document.createElementNS(svgNS, "circle");
+  innerBull.setAttribute("cx", "0");
+  innerBull.setAttribute("cy", "0");
+  innerBull.setAttribute("r", String(radii.innerBull));
+  innerBull.setAttribute("class", "dartboard-bull inner");
+  innerBull.setAttribute("fill", "#d64045");
+  innerBull.dataset.dartSegment = "true";
+  innerBull.dataset.number = "25";
+  innerBull.dataset.multiplier = "2";
+  innerBull.dataset.score = "50";
+  innerBull.dataset.label = "DB";
+  innerBull.dataset.readable = "Double Bull";
+  innerBull.dataset.double = "true";
+  svg.appendChild(innerBull);
+
+  const numbersGroup = document.createElementNS(svgNS, "g");
+  numbersGroup.setAttribute("class", "dartboard-numbers");
+
+  DARTBOARD_NUMBERS.forEach((number, index) => {
+    const angle = -90 + index * segmentAngle;
+    const { x, y } = polarToCartesian(189, angle);
+    const text = document.createElementNS(svgNS, "text");
+    text.setAttribute("x", x.toFixed(2));
+    text.setAttribute("y", y.toFixed(2));
+    text.setAttribute("dy", "6");
+    text.textContent = String(number);
+    numbersGroup.appendChild(text);
+  });
+
+  svg.appendChild(numbersGroup);
+  container.appendChild(svg);
+  container.dataset.rendered = "true";
+}
+
+function updateDartPickerView() {
+  const isBoard = gameState.dartNumberOrder === "dartboard";
+  if (elements.dartNumberGrid) {
+    elements.dartNumberGrid.hidden = isBoard;
+  }
+  if (elements.dartboardPicker) {
+    elements.dartboardPicker.hidden = !isBoard;
+  }
+
+  if (isBoard) {
+    renderDartboardPicker();
+  } else {
+    renderDartNumberButtons();
+    updateDartNumberButtons();
+    setupDartSwipeGestures();
+  }
+}
+
+function polarToCartesian(radius, angleDegrees) {
+  const angleRadians = ((angleDegrees - 90) * Math.PI) / 180;
+  return {
+    x: radius * Math.cos(angleRadians),
+    y: radius * Math.sin(angleRadians),
+  };
+}
+
+function createRingPath(outerRadius, innerRadius, startAngle, endAngle) {
+  const outerStart = polarToCartesian(outerRadius, startAngle);
+  const outerEnd = polarToCartesian(outerRadius, endAngle);
+  const innerStart = polarToCartesian(innerRadius, endAngle);
+  const innerEnd = polarToCartesian(innerRadius, startAngle);
+
+  return [
+    "M",
+    outerStart.x.toFixed(3),
+    outerStart.y.toFixed(3),
+    "A",
+    outerRadius.toFixed(3),
+    outerRadius.toFixed(3),
+    "0",
+    "0",
+    "1",
+    outerEnd.x.toFixed(3),
+    outerEnd.y.toFixed(3),
+    "L",
+    innerStart.x.toFixed(3),
+    innerStart.y.toFixed(3),
+    "A",
+    innerRadius.toFixed(3),
+    innerRadius.toFixed(3),
+    "0",
+    "0",
+    "0",
+    innerEnd.x.toFixed(3),
+    innerEnd.y.toFixed(3),
+    "Z",
+  ].join(" ");
+}
+
 function initializeDartPicker() {
-  renderDartNumberButtons();
-  updateDartNumberOrderButtons();
   gameState.dartMultiplier = MULTIPLIER_CONFIG[gameState.dartMultiplier] ? gameState.dartMultiplier : 1;
   updateDartModeButtons();
-  updateDartNumberButtons();
-  setupDartSwipeGestures();
+  updateDartNumberOrderButtons();
+  updateDartPickerView();
 }
 
 function setDartMultiplier(multiplier) {
@@ -1684,6 +1917,7 @@ function updateDartModeButtons() {
 }
 
 function updateDartNumberButtons() {
+  if (gameState.dartNumberOrder === "dartboard") return;
   const config = MULTIPLIER_CONFIG[gameState.dartMultiplier] || MULTIPLIER_CONFIG[1];
 
   elements.dartNumberButtons.forEach((button) => {

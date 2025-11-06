@@ -269,9 +269,11 @@
         <div id="dart-picker" class="dart-picker" aria-label="Dart-Schnellauswahl für Single, Double, Triple und Bull">
           <div class="dart-number-order" role="group" aria-label="Zahlenanordnung">
             <button type="button" class="dart-number-order-btn active" data-order="sequential">Zahlenfolge</button>
-            <button type="button" class="dart-number-order-btn" data-order="board">Board-Nachbarn</button>
+            <button type="button" class="dart-number-order-btn" data-order="adjacent">Nachbarn</button>
+            <button type="button" class="dart-number-order-btn" data-order="dartboard">Dartboard</button>
           </div>
           <div id="dart-number-grid" class="dart-grid dart-numbers" aria-label="Zahlenfelder"></div>
+          <div id="dartboard-picker" class="dartboard-picker" hidden aria-label="Dartboard Darstellung"></div>
           <div class="dart-grid dart-bull">
             <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1"
               data-double="false">

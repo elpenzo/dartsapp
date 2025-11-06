@@ -1143,6 +1143,45 @@ body:not(.sets-mode) .player-legs-wrapper {
   outline-offset: 2px;
 }
 
+.dartboard-picker {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1 / 1;
+  margin: 0.75rem auto 0;
+}
+
+.dartboard-picker svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.dartboard-segment,
+.dartboard-bull {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  stroke: #0b1220;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.dartboard-segment.single {
+  stroke-width: 1;
+}
+
+.dartboard-picker [data-dart-segment]:hover {
+  opacity: 0.85;
+}
+
+.dartboard-numbers {
+  fill: #f3f4f6;
+  font-weight: 600;
+  font-size: 18px;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
 .combo-button {
   border-radius: 10px;
   border: 1px solid rgba(36, 85, 245, 0.2);
