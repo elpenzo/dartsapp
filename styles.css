@@ -72,9 +72,9 @@ body {
 
 .play-view .app-main,
 body.play-view .app-main {
-  width: min(1400px, 98vw);
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 1.25rem;
+  width: min(1500px, 98vw);
+  grid-template-columns: minmax(0, 58%) minmax(0, 42%);
+  gap: 1.5rem;
   align-items: start;
 }
 
@@ -716,6 +716,7 @@ button.ghost {
   flex-direction: column;
   gap: 1rem;
   margin-top: 1rem;
+  align-items: center;
 }
 
 .scoreboard-detail > .card {
@@ -755,6 +756,11 @@ button.ghost {
   .play-view .voice-console,
   body.play-view .voice-console {
     grid-column: 1;
+  }
+
+  .dartboard-picker {
+    width: 100%;
+    max-width: 460px;
   }
 }
 
@@ -1150,8 +1156,9 @@ body:not(.sets-mode) .player-legs-wrapper {
 }
 
 .dart-picker.board-mode .dartboard-picker {
-  max-width: 460px;
   width: 100%;
+  max-width: clamp(520px, 48vw, 680px);
+  margin-top: 0.5rem;
 }
 
 .dart-picker.board-mode .dart-number-order {
@@ -1161,8 +1168,7 @@ body:not(.sets-mode) .player-legs-wrapper {
 
 .dartboard-picker {
   position: relative;
-  width: 100%;
-  max-width: 360px;
+  width: clamp(360px, 42vw, 640px);
   aspect-ratio: 1 / 1;
   margin: 0.75rem auto 0;
 }
