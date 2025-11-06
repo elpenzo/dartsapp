@@ -1083,6 +1083,28 @@ body:not(.sets-mode) .player-legs-wrapper {
   flex: 1 1 160px;
 }
 
+.profile-data-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.profile-data-status {
+  min-height: 1.25rem;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.profile-data-status.success {
+  color: var(--success);
+}
+
+.profile-data-status.error {
+  color: var(--danger);
+}
+
 .profile-list-container {
   margin-top: 1.5rem;
   display: flex;

@@ -93,6 +93,10 @@ const elements = {
   profileNickname: document.getElementById("profile-nickname"),
   profileIdInput: document.getElementById("profile-id"),
   profileSubmitBtn: document.getElementById("profile-submit"),
+  profileExportBtn: document.getElementById("profile-export"),
+  profileImportBtn: document.getElementById("profile-import"),
+  profileImportInput: document.getElementById("profile-import-file"),
+  profileDataStatus: document.getElementById("profile-data-status"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
   leaderboardBody: document.getElementById("leaderboard-body"),
@@ -465,6 +469,15 @@ async function initialize() {
   }
   if (elements.profileList) {
     elements.profileList.addEventListener("click", onProfileListClick);
+  }
+  if (elements.profileExportBtn) {
+    elements.profileExportBtn.addEventListener("click", onProfileExportClick);
+  }
+  if (elements.profileImportBtn) {
+    elements.profileImportBtn.addEventListener("click", onProfileImportClick);
+  }
+  if (elements.profileImportInput) {
+    elements.profileImportInput.addEventListener("change", onProfileImportFileChange);
   }
 
   await loadProfiles();
@@ -2224,6 +2237,213 @@ function onProfileImageChange(event) {
     }
   };
   reader.readAsDataURL(file);
+}
+
+function setProfileDataStatus(state, message) {
+  if (!elements.profileDataStatus) return;
+  elements.profileDataStatus.textContent = message || "";
+  elements.profileDataStatus.classList.remove("success", "error");
+  if (state === "success" || state === "error") {
+    elements.profileDataStatus.classList.add(state);
+  }
+}
+
+function formatProfileExportFilename() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `profiles-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
+    now.getHours()
+  )}${pad(now.getMinutes())}${pad(now.getSeconds())}.json`;
+}
+
+function onProfileExportClick() {
+  try {
+    const exportData = structuredClone(profiles);
+    const count = Array.isArray(exportData) ? exportData.length : 0;
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const filename = formatProfileExportFilename();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    requestAnimationFrame(() => URL.revokeObjectURL(url));
+    setProfileDataStatus(
+      "success",
+      count
+        ? `${count} Profile exportiert (${filename}).`
+        : `Leere Profildatei exportiert (${filename}).`
+    );
+  } catch (error) {
+    console.error("Profile konnten nicht exportiert werden:", error);
+    setProfileDataStatus("error", "Export fehlgeschlagen.");
+  }
+}
+
+function onProfileImportClick() {
+  if (!elements.profileImportInput) return;
+  elements.profileImportInput.value = "";
+  elements.profileImportInput.click();
+}
+
+function onProfileImportFileChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const parsed = JSON.parse(text);
+      const normalized = normalizeImportedProfiles(parsed);
+      if (!normalized.length) {
+        setProfileDataStatus("error", "Keine gültigen Profile in der Datei gefunden.");
+        return;
+      }
+      const mergeResult = mergeImportedProfiles(normalized);
+      saveProfiles();
+      renderProfileOptions();
+      renderProfileList();
+      renderLeaderboard();
+      handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
+      handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+      let playersUpdated = false;
+      mergeResult.updatedIds.forEach((profileId) => {
+        if (refreshPlayersForProfile(profileId)) {
+          playersUpdated = true;
+        }
+      });
+      if (playersUpdated) {
+        render();
+      }
+      const parts = [];
+      if (mergeResult.replacedCount) {
+        parts.push(`${mergeResult.replacedCount} Profile aktualisiert`);
+      }
+      if (mergeResult.addedCount) {
+        parts.push(`${mergeResult.addedCount} neue Profile`);
+      }
+      const summary = parts.length ? parts.join(", ") : "Keine Änderungen";
+      const fileName = file.name || "Datei";
+      setProfileDataStatus("success", `Profile aus "${fileName}" importiert: ${summary}.`);
+    } catch (error) {
+      console.error("Profile konnten nicht importiert werden:", error);
+      setProfileDataStatus("error", "Import fehlgeschlagen. Bitte Datei prüfen.");
+    } finally {
+      if (elements.profileImportInput) {
+        elements.profileImportInput.value = "";
+      }
+    }
+  };
+  reader.onerror = () => {
+    console.error("Profil-Import: Datei konnte nicht gelesen werden:", reader.error);
+    setProfileDataStatus("error", "Datei konnte nicht gelesen werden.");
+    if (elements.profileImportInput) {
+      elements.profileImportInput.value = "";
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function normalizeImportedProfiles(source) {
+  const candidates = Array.isArray(source)
+    ? source
+    : Array.isArray(source?.profiles)
+    ? source.profiles
+    : [];
+  if (!candidates.length) return [];
+  const normalized = [];
+  const seenIds = new Set();
+
+  candidates.forEach((entry) => {
+    if (!entry || typeof entry !== "object") return;
+
+    const profile = {
+      id: typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : uid(),
+      firstName: typeof entry.firstName === "string" ? entry.firstName.trim() : "",
+      lastName: typeof entry.lastName === "string" ? entry.lastName.trim() : "",
+      nickname: typeof entry.nickname === "string" ? entry.nickname.trim() : "",
+      image: typeof entry.image === "string" ? entry.image : "",
+      stats: {},
+      history: [],
+      createdAt: Number.isFinite(Number(entry.createdAt)) ? Number(entry.createdAt) : Date.now(),
+      updatedAt: Number.isFinite(Number(entry.updatedAt)) ? Number(entry.updatedAt) : Date.now(),
+    };
+
+    if (entry.stats && typeof entry.stats === "object") {
+      profile.stats = {
+        gamesPlayed: Number(entry.stats.gamesPlayed) || 0,
+        legsWon: Number(entry.stats.legsWon) || 0,
+        setsWon: Number(entry.stats.setsWon) || 0,
+        totalPoints: Number(entry.stats.totalPoints) || 0,
+        totalDarts: Number(entry.stats.totalDarts) || 0,
+        dartHistogram:
+          entry.stats.dartHistogram && typeof entry.stats.dartHistogram === "object"
+            ? entry.stats.dartHistogram
+            : undefined,
+      };
+    }
+
+    if (Array.isArray(entry.history)) {
+      profile.history = entry.history
+        .filter((item) => item && typeof item === "object")
+        .map((item) => ({
+          date: item.date || null,
+          points: Number(item.points) || 0,
+          darts: Number(item.darts) || 0,
+          legWon: Boolean(item.legWon),
+          legsWon: Number(item.legsWon) || 0,
+          setsWon: Number(item.setsWon) || 0,
+          opponent: typeof item.opponent === "string" ? item.opponent : undefined,
+        }));
+    }
+
+    ensureProfileStats(profile);
+    if (!profile.nickname) {
+      profile.nickname =
+        profile.firstName ||
+        profile.lastName ||
+        `Spieler ${normalized.length + 1}`;
+    }
+
+    if (seenIds.has(profile.id)) {
+      profile.id = uid();
+    }
+    seenIds.add(profile.id);
+    normalized.push(profile);
+  });
+
+  return normalized;
+}
+
+function mergeImportedProfiles(importedProfiles) {
+  if (!Array.isArray(importedProfiles) || !importedProfiles.length) {
+    return { addedCount: 0, replacedCount: 0, updatedIds: [] };
+  }
+  const mergedMap = new Map(profiles.map((profile) => [profile.id, profile]));
+  let addedCount = 0;
+  let replacedCount = 0;
+  const updatedIds = new Set();
+
+  importedProfiles.forEach((incoming) => {
+    if (!incoming || typeof incoming !== "object") return;
+    if (mergedMap.has(incoming.id)) {
+      const target = mergedMap.get(incoming.id);
+      Object.assign(target, incoming);
+      ensureProfileStats(target);
+      target.updatedAt = incoming.updatedAt || Date.now();
+      updatedIds.add(incoming.id);
+      replacedCount += 1;
+    } else {
+      ensureProfileStats(incoming);
+      mergedMap.set(incoming.id, incoming);
+      addedCount += 1;
+    }
+  });
+
+  profiles = Array.from(mergedMap.values());
+  return { addedCount, replacedCount, updatedIds: Array.from(updatedIds) };
 }
 
 function resetProfileForm(skipFields = false) {
