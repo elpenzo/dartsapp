@@ -12,7 +12,7 @@
   <header class="app-header">
     <h1>friendDartBoard</h1>
     <p class="tagline">Sprich deine Würfe - die App protokolliert das Leg.</p>
-    <div class="view-toggle" role="group" aria-label="Ansicht waehlen">
+    <div class="view-toggle" role="group" aria-label="Ansicht wählen">
       <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
       <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
       <button type="button" class="view-toggle-btn" data-view="tournament">Turnier</button>
@@ -258,26 +258,88 @@
       <section class="scoreboard-quick" aria-labelledby="quick-select-title">
         <h3 id="quick-select-title">Schnellauswahl</h3>
         <div class="dart-combos" aria-label="Standardfolgen">
-          <button type="button" class="combo-button" data-combo="1-20-5">1 - 20 - 5</button>
-          <button type="button" class="combo-button" data-combo="3-19-7">3 - 19 - 7</button>
+          <button type="button" class="combo-button" data-combo="1-20-5">1 • 20 • 5</button>
+          <button type="button" class="combo-button" data-combo="3-19-7">3 • 19 • 7</button>
         </div>
-        <div class="dart-order-switch" role="group" aria-label="Zahlenreihenfolge waehlen">
-          <button type="button" class="dart-order-button active" data-order="sequential">Standard</button>
-          <button type="button" class="dart-order-button" data-order="heatmap">Heatmap</button>
-        </div>
-        <div class="dart-mode-switch" role="group" aria-label="Multiplikator waehlen">
+        <div class="dart-mode-switch" role="group" aria-label="Multiplikator wählen">
           <button type="button" class="dart-mode-button active" data-multiplier="1">Single</button>
           <button type="button" class="dart-mode-button" data-multiplier="2">Double</button>
           <button type="button" class="dart-mode-button" data-multiplier="3">Triple</button>
         </div>
-        <div id="dart-picker" class="dart-picker" aria-label="Dart-Schnellauswahl fuer Single, Double, Triple und Bull">
-          <div class="dart-grid dart-numbers"></div>
+        <div id="dart-picker" class="dart-picker" aria-label="Dart-Schnellauswahl für Single, Double, Triple und Bull">
+          <div class="dart-grid dart-numbers">
+            <button class="dart-button dart-number" data-number="0">
+              <span class="value">0</span>
+            </button>
+            <button class="dart-button dart-number" data-number="1">
+              <span class="value">1</span>
+            </button>
+            <button class="dart-button dart-number" data-number="2">
+              <span class="value">2</span>
+            </button>
+            <button class="dart-button dart-number" data-number="3">
+              <span class="value">3</span>
+            </button>
+            <button class="dart-button dart-number" data-number="4">
+              <span class="value">4</span>
+            </button>
+            <button class="dart-button dart-number" data-number="5">
+              <span class="value">5</span>
+            </button>
+            <button class="dart-button dart-number" data-number="6">
+              <span class="value">6</span>
+            </button>
+            <button class="dart-button dart-number" data-number="7">
+              <span class="value">7</span>
+            </button>
+            <button class="dart-button dart-number" data-number="8">
+              <span class="value">8</span>
+            </button>
+            <button class="dart-button dart-number" data-number="9">
+              <span class="value">9</span>
+            </button>
+            <button class="dart-button dart-number" data-number="10">
+              <span class="value">10</span>
+            </button>
+            <button class="dart-button dart-number" data-number="11">
+              <span class="value">11</span>
+            </button>
+            <button class="dart-button dart-number" data-number="12">
+              <span class="value">12</span>
+            </button>
+            <button class="dart-button dart-number" data-number="13">
+              <span class="value">13</span>
+            </button>
+            <button class="dart-button dart-number" data-number="14">
+              <span class="value">14</span>
+            </button>
+            <button class="dart-button dart-number" data-number="15">
+              <span class="value">15</span>
+            </button>
+            <button class="dart-button dart-number" data-number="16">
+              <span class="value">16</span>
+            </button>
+            <button class="dart-button dart-number" data-number="17">
+              <span class="value">17</span>
+            </button>
+            <button class="dart-button dart-number" data-number="18">
+              <span class="value">18</span>
+            </button>
+            <button class="dart-button dart-number" data-number="19">
+              <span class="value">19</span>
+            </button>
+            <button class="dart-button dart-number" data-number="20">
+              <span class="value">20</span>
+            </button>
+          </div>
           <div class="dart-grid dart-bull">
-            <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1" data-double="false">
+            <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1"
+              data-double="false">
               <span class="abbr">SB</span>
               <span class="value">25</span>
             </button>
-            <button class="dart-button" data-label="DB" data-readable="Double Bull" data-score="50" data-multiplier="2" data-double="true">
+            <button class="dart-button" data-label="DB" data-readable="Double Bull" data-score="50" data-multiplier="2"
+              data-double="true">
               <span class="abbr">DB</span>
               <span class="value">50</span>
             </button>
@@ -353,11 +415,6 @@
           <button type="reset" id="profile-reset" class="ghost">Zurücksetzen</button>
         </div>
       </form>
-      <div class="profile-import-export">
-        <button type="button" id="profile-export-btn" class="ghost">Profile exportieren</button>
-        <button type="button" id="profile-import-btn" class="ghost">Profile importieren</button>
-        <input id="profile-import-input" type="file" accept="application/json" hidden />
-      </div>
       <div class="profile-list-container">
         <h3>Gespeicherte Profile</h3>
         <ul id="profile-list" class="profile-list"></ul>
@@ -366,7 +423,7 @@
 
     <section class="card leaderboard-card" aria-labelledby="leaderboard-title">
       <h2 id="leaderboard-title">Leaderboard</h2>
-      <div class="leaderboard-controls" role="group" aria-label="Sortierung waehlen">
+      <div class="leaderboard-controls" role="group" aria-label="Sortierung wählen">
         <button type="button" class="leaderboard-sort-btn active" data-sort="average">Ø Punkte/Dart</button>
         <button type="button" class="leaderboard-sort-btn" data-sort="legs">Legs gewonnen</button>
       </div>
@@ -438,5 +495,3 @@
 </body>
 
 </html>
-
-
