@@ -500,6 +500,7 @@ function onSetupSubmit(event) {
   ];
 
   startGame(playerConfigs, startingScore, outMode, matchMode);
+  setViewMode("play");
 }
 
 function startGame(
