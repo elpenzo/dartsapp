@@ -71,10 +71,7 @@ const elements = {
   undoBtn: document.getElementById("undo-btn"),
   dartModeSwitch: document.querySelector(".dart-mode-switch"),
   dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
-  dartOrderSwitch: document.querySelector(".dart-order-switch"),
-  dartOrderButtons: Array.from(document.querySelectorAll(".dart-order-button")),
   dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
-  dartNumbersContainer: document.querySelector(".dart-grid.dart-numbers"),
   comboButtons: Array.from(document.querySelectorAll(".combo-button")),
   viewToggleButtons: Array.from(document.querySelectorAll(".view-toggle-btn")),
   tournamentCard: document.querySelector(".tournament-card"),
@@ -96,9 +93,6 @@ const elements = {
   profileNickname: document.getElementById("profile-nickname"),
   profileIdInput: document.getElementById("profile-id"),
   profileSubmitBtn: document.getElementById("profile-submit"),
-  profileExportBtn: document.getElementById("profile-export-btn"),
-  profileImportBtn: document.getElementById("profile-import-btn"),
-  profileImportInput: document.getElementById("profile-import-input"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
   leaderboardBody: document.getElementById("leaderboard-body"),
@@ -151,7 +145,6 @@ const gameState = {
   legStarterIndex: 0,
   lastLegWinnerId: null,
   matchCompleted: false,
-  dartNumberOrderMode: "sequential",
   tournament: createInitialTournamentState(),
 };
 
@@ -446,12 +439,6 @@ async function initialize() {
       button.addEventListener("click", () => applyCombo(button.dataset.combo));
     });
   }
-  if (elements.dartOrderSwitch && elements.dartOrderButtons.length) {
-    elements.dartOrderButtons.forEach((button) => {
-      button.addEventListener("click", () => setDartNumberOrderMode(button.dataset.order));
-    });
-  }
-  updateDartOrderButtons();
   if (elements.leaderboardSortButtons.length) {
     elements.leaderboardSortButtons.forEach((button) => {
       button.addEventListener("click", () => setLeaderboardSort(button.dataset.sort || "average"));
@@ -478,16 +465,6 @@ async function initialize() {
   }
   if (elements.profileList) {
     elements.profileList.addEventListener("click", onProfileListClick);
-  }
-  if (elements.profileExportBtn) {
-    elements.profileExportBtn.addEventListener("click", () => exportProfilesToFile());
-  }
-  if (elements.profileImportBtn && elements.profileImportInput) {
-    elements.profileImportBtn.addEventListener("click", () => {
-      elements.profileImportInput.value = "";
-      elements.profileImportInput.click();
-    });
-    elements.profileImportInput.addEventListener("change", onProfileImportFileChange);
   }
 
   await loadProfiles();
@@ -535,16 +512,16 @@ function startGame(
 ) {
   const configs = Array.isArray(playerConfigs)
     ? playerConfigs.map((entry, index) => {
-        if (typeof entry === "string") {
-          return { name: entry.trim(), profileId: "" };
-        }
-        const normalizedName = (entry.name || entry.displayName || `Player ${index + 1}`).trim();
-        return {
-          ...entry,
-          name: normalizedName,
-          profileId: entry.profileId || "",
-        };
-      })
+      if (typeof entry === "string") {
+        return { name: entry.trim(), profileId: "" };
+      }
+      const normalizedName = (entry.name || entry.displayName || `Player ${index + 1}`).trim();
+      return {
+        ...entry,
+        name: normalizedName,
+        profileId: entry.profileId || "",
+      };
+    })
     : [];
 
   if (!configs.length) {
@@ -1011,9 +988,6 @@ function applyDart(interpretation) {
   gameState.currentTurn.spoken.push(interpretation.readable);
   player.lastTurn = normalizedDart.label;
   recordDartHit(player, normalizedDart);
-  if (normalizedDart.multiplier === 3) {
-    playTripleHitSound();
-  }
 
   if (remaining === 0) {
     finishTurn(false, true);
@@ -1050,12 +1024,12 @@ function applyTurnResult(result) {
     gameState.currentTurn && gameState.currentTurn.playerId === player.id
       ? gameState.currentTurn
       : {
-          playerId: player.id,
-          darts: [],
-          startingScore: result.score + remaining,
-          bust: false,
-          spoken: [],
-        };
+        playerId: player.id,
+        darts: [],
+        startingScore: result.score + remaining,
+        bust: false,
+        spoken: [],
+      };
 
   player.score = remaining;
   player.lastTurn = `${result.score}`;
@@ -1217,7 +1191,6 @@ function summarizeTurn(turn) {
 
 function render() {
   renderScoreboard();
-  renderDartNumberGrid();
   renderHistory();
   updateUndoAvailability();
 }
@@ -1227,14 +1200,6 @@ const MAX_SINGLE_OUT_CHECKOUT = 180;
 const CHECKOUT_SHOTS = createCheckoutShotCatalog();
 const CHECKOUT_DOUBLE_SHOTS = CHECKOUT_SHOTS.filter((shot) => shot.isDouble);
 const CHECKOUT_CACHE = new Map();
-let audioContext = null;
-<<<<<<< HEAD
-<<<<<<< HEAD
-let currentDartNumberOrder = [];
-=======
->>>>>>> df4d9457abaec47125ad0c13e740d05377d33eea
-=======
->>>>>>> df4d9457abaec47125ad0c13e740d05377d33eea
 
 function renderScoreboard() {
   const matchConfig = getCurrentMatchConfig();
@@ -1319,7 +1284,7 @@ function renderScoreboard() {
       node.classList.add("winner");
     }
 
-  elements.scoreboard.appendChild(fragment);
+    elements.scoreboard.appendChild(fragment);
   });
 
   updateActivePlayerBanner();
@@ -1539,43 +1504,6 @@ function createCheckoutShotCatalog() {
   return shots;
 }
 
-function playTripleHitSound() {
-  if (typeof window === "undefined") return;
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) return;
-  if (!audioContext) {
-    try {
-      audioContext = new AudioContext();
-    } catch (error) {
-      audioContext = null;
-      return;
-    }
-  }
-  if (!audioContext) return;
-  if (audioContext.state === "suspended") {
-    audioContext.resume().catch(() => {});
-  }
-
-  const oscillator = audioContext.createOscillator();
-  const gain = audioContext.createGain();
-  const startTime = audioContext.currentTime;
-  const duration = 0.28;
-
-  oscillator.type = "triangle";
-  oscillator.frequency.setValueAtTime(660, startTime);
-  oscillator.frequency.exponentialRampToValueAtTime(990, startTime + duration);
-
-  gain.gain.setValueAtTime(0, startTime);
-  gain.gain.linearRampToValueAtTime(0.45, startTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-  oscillator.connect(gain);
-  gain.connect(audioContext.destination);
-
-  oscillator.start(startTime);
-  oscillator.stop(startTime + duration + 0.05);
-}
-
 function renderHistory() {
   elements.historyLog.innerHTML = "";
   gameState.history.slice(0, 12).forEach((entry) => {
@@ -1629,8 +1557,9 @@ function requiresDoubleCheckout() {
 
 function initializeDartPicker() {
   gameState.dartMultiplier = MULTIPLIER_CONFIG[gameState.dartMultiplier] ? gameState.dartMultiplier : 1;
-  renderDartNumberGrid(true);
   updateDartModeButtons();
+  updateDartNumberButtons();
+  setupDartSwipeGestures();
 }
 
 function setDartMultiplier(multiplier) {
@@ -1649,31 +1578,7 @@ function updateDartModeButtons() {
   });
 }
 
-function setDartNumberOrderMode(mode) {
-  const normalized = mode === "heatmap" ? "heatmap" : "sequential";
-  if (gameState.dartNumberOrderMode === normalized) {
-    if (normalized === "heatmap") {
-      renderDartNumberGrid();
-    }
-    return;
-  }
-  gameState.dartNumberOrderMode = normalized;
-  updateDartOrderButtons();
-  renderDartNumberGrid(true);
-}
-
-function updateDartOrderButtons() {
-  if (!elements.dartOrderButtons?.length) return;
-  elements.dartOrderButtons.forEach((button) => {
-    const orderMode = button.dataset.order === "heatmap" ? "heatmap" : "sequential";
-    const isActive = orderMode === gameState.dartNumberOrderMode;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
-  });
-}
-
 function updateDartNumberButtons() {
-  if (!elements.dartNumberButtons.length) return;
   const config = MULTIPLIER_CONFIG[gameState.dartMultiplier] || MULTIPLIER_CONFIG[1];
 
   elements.dartNumberButtons.forEach((button) => {
@@ -1684,8 +1589,8 @@ function updateDartNumberButtons() {
       base === 0
         ? "0"
         : gameState.dartMultiplier === 1
-        ? `${base}`
-        : `${config.short}${base}`;
+          ? `${base}`
+          : `${config.short}${base}`;
     const readable = base === 0 ? "0" : `${config.label} ${base}`;
 
     button.dataset.label = label;
@@ -1707,111 +1612,6 @@ function updateDartNumberButtons() {
       valueNode.textContent = String(score);
     }
   });
-}
-
-function renderDartNumberGrid(force = false) {
-  const container = elements.dartNumbersContainer;
-  if (!container) return;
-  const order = getDartNumberOrder();
-  if (!force && arraysEqual(order, currentDartNumberOrder)) {
-    updateDartNumberButtons();
-    return;
-  }
-  currentDartNumberOrder = order.slice();
-  const fragment = document.createDocumentFragment();
-  order.forEach((value) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "dart-button dart-number";
-    button.dataset.number = String(value);
-    const span = document.createElement("span");
-    span.className = "value";
-    span.textContent = String(value);
-    button.appendChild(span);
-    fragment.appendChild(button);
-  });
-  container.innerHTML = "";
-  container.appendChild(fragment);
-  elements.dartNumberButtons = Array.from(container.querySelectorAll(".dart-number"));
-  updateDartNumberButtons();
-  setupDartSwipeGestures();
-}
-
-function getDartNumberOrder() {
-  if (gameState.dartNumberOrderMode === "heatmap") {
-    return getHeatmapNumberOrder();
-  }
-  return getSequentialNumberOrder();
-}
-
-function getSequentialNumberOrder() {
-  const order = [];
-  for (let value = 0; value <= 20; value += 1) {
-    order.push(value);
-  }
-  return order;
-}
-
-function getHeatmapNumberOrder() {
-  const player = gameState.players[gameState.activeIndex];
-  if (!player) {
-    return getSequentialNumberOrder();
-  }
-  const histogram = getHistoricalHistogramForPlayer(player);
-  if (!histogram) {
-    return getSequentialNumberOrder();
-  }
-  const totals = [];
-  let aggregate = 0;
-  for (let value = 1; value <= 20; value += 1) {
-    const single = Number(histogram[`S${value}`]) || 0;
-    const double = Number(histogram[`D${value}`]) || 0;
-    const triple = Number(histogram[`T${value}`]) || 0;
-    const total = single + double + triple;
-    totals.push({ value, total, triple, double, single });
-    aggregate += total;
-  }
-  if (aggregate === 0) {
-    return getSequentialNumberOrder();
-  }
-  totals.sort((a, b) => {
-    if (b.total !== a.total) return b.total - a.total;
-    if (b.triple !== a.triple) return b.triple - a.triple;
-    if (b.double !== a.double) return b.double - a.double;
-    if (b.single !== a.single) return b.single - a.single;
-    return a.value - b.value;
-  });
-  return [0, ...totals.map((entry) => entry.value)];
-}
-
-function getHistoricalHistogramForPlayer(player) {
-  let histogram = null;
-  if (player.profileId) {
-    const profile = getProfileById(player.profileId);
-    if (profile) {
-      ensureProfileStats(profile);
-      histogram = cloneHistogram(profile.stats.dartHistogram);
-    }
-  }
-  if (!histogram) {
-    histogram = createEmptyHistogram();
-  }
-  if (player.dartHitsThisGame) {
-    Object.keys(player.dartHitsThisGame).forEach((key) => {
-      histogram[key] = (histogram[key] || 0) + (player.dartHitsThisGame[key] || 0);
-    });
-  }
-  return histogram;
-}
-
-function arraysEqual(a, b) {
-  if (a === b) return true;
-  if (!Array.isArray(a) || !Array.isArray(b)) return false;
-  if (a.length !== b.length) return false;
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) return false;
-  }
-  return true;
 }
 
 function setupDartSwipeGestures() {
@@ -2128,7 +1928,6 @@ function updateViewModeUI() {
   }
   if (currentView === "play") {
     updateActivePlayerBanner();
-    renderDartNumberGrid();
   } else if (currentView === "tournament") {
     renderTournamentBracket();
   } else if (currentView === "leaderboard") {
@@ -2561,171 +2360,6 @@ function resetProfileStats(profileId) {
   notifyVoiceStatus("success", "Statistiken zurückgesetzt");
 }
 
-function exportProfilesToFile() {
-  try {
-    const data = JSON.stringify(profiles, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `profiles-${timestamp}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-    notifyVoiceStatus("success", "Profile exportiert");
-  } catch (error) {
-    console.error("Profile konnten nicht exportiert werden:", error);
-    notifyVoiceStatus("error", "Export fehlgeschlagen");
-  }
-}
-
-function onProfileImportFileChange(event) {
-  const input = event.currentTarget;
-  const file = input?.files?.[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const content = typeof reader.result === "string" ? reader.result : "";
-      const parsed = JSON.parse(content);
-      const importedCount = importProfilesFromData(parsed);
-      notifyVoiceStatus(
-        "success",
-        `${importedCount} Profil${importedCount === 1 ? "" : "e"} importiert`
-      );
-    } catch (error) {
-      console.error("Profile konnten nicht importiert werden:", error);
-      notifyVoiceStatus("error", "Import fehlgeschlagen");
-    } finally {
-      if (input) input.value = "";
-    }
-  };
-  reader.onerror = () => {
-    notifyVoiceStatus("error", "Datei konnte nicht gelesen werden");
-    if (input) input.value = "";
-  };
-  reader.readAsText(file);
-}
-
-function importProfilesFromData(data) {
-  const entries = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.profiles)
-    ? data.profiles
-    : null;
-  if (!entries || !entries.length) {
-    throw new Error("Keine Profile in der Datei gefunden");
-  }
-
-  const seenIds = new Set();
-  const normalized = entries
-    .map((entry) => normalizeImportedProfile(entry, seenIds))
-    .filter(Boolean);
-
-  if (!normalized.length) {
-    throw new Error("Keine gültigen Profile in der Datei gefunden");
-  }
-
-  profiles = normalized;
-  saveProfiles();
-  renderProfileOptions();
-  renderProfileList();
-  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
-
-  gameState.players.forEach((player) => {
-    if (!player.profileId) return;
-    const profile = getProfileById(player.profileId);
-    if (profile) {
-      player.displayName = getProfileDisplayName(profile);
-      player.fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
-      player.photo = profile.image || null;
-    } else {
-      player.profileId = "";
-      player.displayName = player.name || "Player";
-      player.fullName = "";
-      player.photo = null;
-    }
-  });
-
-  renderLeaderboard();
-  render();
-  return normalized.length;
-}
-
-function normalizeImportedProfile(rawProfile, seenIds) {
-  if (!rawProfile || typeof rawProfile !== "object") return null;
-
-  let id =
-    typeof rawProfile.id === "string" && rawProfile.id.trim()
-      ? rawProfile.id.trim()
-      : rawProfile.id && typeof rawProfile.id.toString === "function"
-      ? rawProfile.id.toString()
-      : "";
-  if (!id || seenIds.has(id)) {
-    do {
-      id = uid();
-    } while (seenIds.has(id));
-  }
-  seenIds.add(id);
-
-  const firstName =
-    typeof rawProfile.firstName === "string" ? rawProfile.firstName.trim() : "";
-  const lastName =
-    typeof rawProfile.lastName === "string" ? rawProfile.lastName.trim() : "";
-  const nickname =
-    typeof rawProfile.nickname === "string" ? rawProfile.nickname.trim() : "";
-  const image = typeof rawProfile.image === "string" ? rawProfile.image : "";
-
-  const stats =
-    rawProfile.stats && typeof rawProfile.stats === "object" ? { ...rawProfile.stats } : {};
-
-  const profile = {
-    id,
-    firstName,
-    lastName,
-    nickname,
-    image,
-    stats,
-    history: Array.isArray(rawProfile.history) ? rawProfile.history.slice(0, 10) : [],
-    createdAt: rawProfile.createdAt || Date.now(),
-    updatedAt: rawProfile.updatedAt || rawProfile.createdAt || Date.now(),
-  };
-
-  ensureProfileStats(profile);
-  profile.stats.gamesPlayed = Number(profile.stats.gamesPlayed) || 0;
-  profile.stats.legsWon = Number(profile.stats.legsWon) || 0;
-  profile.stats.setsWon = Number(profile.stats.setsWon) || 0;
-  profile.stats.totalPoints = Number(profile.stats.totalPoints) || 0;
-  profile.stats.totalDarts = Number(profile.stats.totalDarts) || 0;
-  profile.stats.dartHistogram = cloneHistogram(profile.stats.dartHistogram);
-
-  profile.history = profile.history
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") return null;
-      return {
-        id:
-          typeof entry.id === "string" && entry.id.trim()
-            ? entry.id.trim()
-            : `hist-${uid()}`,
-        date: entry.date || new Date().toISOString(),
-        points: Number(entry.points) || 0,
-        darts: Number(entry.darts) || 0,
-        average: Number(entry.average) || 0,
-        legWon: Boolean(entry.legWon),
-        setsWon: Number(entry.setsWon) || 0,
-        legsWon: Number(entry.legsWon) || 0,
-        dartHistogram: cloneHistogram(entry.dartHistogram),
-      };
-    })
-    .filter(Boolean);
-
-  return profile;
-}
-
 function onProfileListClick(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
@@ -2804,9 +2438,9 @@ async function loadProfiles() {
 
   profiles = Array.isArray(sourceProfiles)
     ? sourceProfiles.map((profile) => {
-        ensureProfileStats(profile);
-        return profile;
-      })
+      ensureProfileStats(profile);
+      return profile;
+    })
     : [];
 
   renderProfileOptions();
@@ -2898,9 +2532,8 @@ function renderProfileList() {
             setsWon || legsWon
               ? ` · Sätze: ${setsWon} · Legs: ${legsWon}`
               : "";
-          return `<li>${dateLabel}: ${entry.points} Punkte · ${entry.darts} Darts · Ø ${avg}${setInfo}${
-            entry.legWon ? " · Sieg" : ""
-          }</li>`;
+          return `<li>${dateLabel}: ${entry.points} Punkte · ${entry.darts} Darts · Ø ${avg}${setInfo}${entry.legWon ? " · Sieg" : ""
+            }</li>`;
         })
         .join("");
       const heatmapMarkup = generateProfileHeatmapMarkup(profile);
@@ -2910,9 +2543,8 @@ function renderProfileList() {
         <div class="profile-info">
           <h4>${displayName}</h4>
           <span>${fullName || ""}</span>
-          <p class="profile-stats">Spiele: ${games} · Sätze: ${sets} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${
-        profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
-      }</p>
+          <p class="profile-stats">Spiele: ${games} · Sätze: ${sets} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
+        }</p>
           ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
           ${heatmapMarkup}
           <div class="profile-actions-inline">
@@ -3258,19 +2890,19 @@ function buildTournamentStructure(players) {
         players: [
           first
             ? {
-                participantId: first.id,
-                name: first.name,
-                seed: first.seed,
-                profileId: first.profileId || "",
-              }
+              participantId: first.id,
+              name: first.name,
+              seed: first.seed,
+              profileId: first.profileId || "",
+            }
             : null,
           second
             ? {
-                participantId: second.id,
-                name: second.name,
-                seed: second.seed,
-                profileId: second.profileId || "",
-              }
+              participantId: second.id,
+              name: second.name,
+              seed: second.seed,
+              profileId: second.profileId || "",
+            }
             : null,
         ],
         winnerId: null,
@@ -3439,11 +3071,11 @@ function propagateTournamentWinner(tournament, match, winnerId) {
   const participant = getTournamentParticipant(tournament, winnerId);
   const payload = participant
     ? {
-        participantId: participant.id,
-        name: participant.name,
-        seed: participant.seed,
-        profileId: participant.profileId || "",
-      }
+      participantId: participant.id,
+      name: participant.name,
+      seed: participant.seed,
+      profileId: participant.profileId || "",
+    }
     : { participantId: winnerId, name: "Unbekannt", seed: null, profileId: "" };
 
   if (!Array.isArray(targetMatch.players)) {
