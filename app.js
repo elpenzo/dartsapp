@@ -988,6 +988,9 @@ function applyDart(interpretation) {
   gameState.currentTurn.spoken.push(interpretation.readable);
   player.lastTurn = normalizedDart.label;
   recordDartHit(player, normalizedDart);
+  if (normalizedDart.multiplier === 3) {
+    playTripleHitSound();
+  }
 
   if (remaining === 0) {
     finishTurn(false, true);
@@ -1200,6 +1203,7 @@ const MAX_SINGLE_OUT_CHECKOUT = 180;
 const CHECKOUT_SHOTS = createCheckoutShotCatalog();
 const CHECKOUT_DOUBLE_SHOTS = CHECKOUT_SHOTS.filter((shot) => shot.isDouble);
 const CHECKOUT_CACHE = new Map();
+let audioContext = null;
 
 function renderScoreboard() {
   const matchConfig = getCurrentMatchConfig();
@@ -1502,6 +1506,43 @@ function createCheckoutShotCatalog() {
     isDouble: true,
   });
   return shots;
+}
+
+function playTripleHitSound() {
+  if (typeof window === "undefined") return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  if (!audioContext) {
+    try {
+      audioContext = new AudioContext();
+    } catch (error) {
+      audioContext = null;
+      return;
+    }
+  }
+  if (!audioContext) return;
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const startTime = audioContext.currentTime;
+  const duration = 0.28;
+
+  oscillator.type = "triangle";
+  oscillator.frequency.setValueAtTime(660, startTime);
+  oscillator.frequency.exponentialRampToValueAtTime(990, startTime + duration);
+
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(0.45, startTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+
+  oscillator.start(startTime);
+  oscillator.stop(startTime + duration + 0.05);
 }
 
 function renderHistory() {
