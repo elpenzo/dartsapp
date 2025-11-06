@@ -257,21 +257,7 @@
       <div id="scoreboard" class="scoreboard-grid" aria-live="polite"></div>
       <section class="scoreboard-quick" aria-labelledby="quick-select-title">
         <h3 id="quick-select-title">Schnellauswahl</h3>
-        <div class="dart-combos" aria-label="Standardfolgen">
-          <button type="button" class="combo-button" data-combo="1-20-5">1 • 20 • 5</button>
-          <button type="button" class="combo-button" data-combo="3-19-7">3 • 19 • 7</button>
-        </div>
-        <div class="dart-mode-switch" role="group" aria-label="Multiplikator wählen">
-          <button type="button" class="dart-mode-button active" data-multiplier="1">Single</button>
-          <button type="button" class="dart-mode-button" data-multiplier="2">Double</button>
-          <button type="button" class="dart-mode-button" data-multiplier="3">Triple</button>
-        </div>
         <div id="dart-picker" class="dart-picker" aria-label="Dart-Schnellauswahl für Single, Double, Triple und Bull">
-          <div class="dart-number-order" role="group" aria-label="Zahlenanordnung">
-            <button type="button" class="dart-number-order-btn active" data-order="sequential">Zahlenfolge</button>
-            <button type="button" class="dart-number-order-btn" data-order="adjacent">Nachbarn</button>
-            <button type="button" class="dart-number-order-btn" data-order="dartboard">Dartboard</button>
-          </div>
           <div id="dart-number-grid" class="dart-grid dart-numbers" aria-label="Zahlenfelder"></div>
           <div id="dartboard-picker" class="dartboard-picker" hidden aria-label="Dartboard Darstellung"></div>
           <div class="dart-grid dart-bull">
@@ -286,6 +272,20 @@
               <span class="value">50</span>
             </button>
           </div>
+        </div>
+        <div class="dart-number-order" role="group" aria-label="Zahlenanordnung">
+          <button type="button" class="dart-number-order-btn active" data-order="sequential">Zahlenfolge</button>
+          <button type="button" class="dart-number-order-btn" data-order="adjacent">Nachbarn</button>
+          <button type="button" class="dart-number-order-btn" data-order="dartboard">Dartboard</button>
+        </div>
+        <div class="dart-mode-switch" role="group" aria-label="Multiplikator wählen">
+          <button type="button" class="dart-mode-button active" data-multiplier="1">Single</button>
+          <button type="button" class="dart-mode-button" data-multiplier="2">Double</button>
+          <button type="button" class="dart-mode-button" data-multiplier="3">Triple</button>
+        </div>
+        <div class="dart-combos" aria-label="Standardfolgen">
+          <button type="button" class="combo-button" data-combo="1-20-5">1 • 20 • 5</button>
+          <button type="button" class="combo-button" data-combo="3-19-7">3 • 19 • 7</button>
         </div>
       </section>
     </section>
@@ -363,8 +363,14 @@
       </form>
       <div class="profile-data-actions">
         <div class="profile-actions-inline" role="group" aria-label="Profil-Dateien verwalten">
-          <button type="button" id="profile-export" class="ghost">Profile exportieren</button>
-          <button type="button" id="profile-import" class="ghost">Profile importieren</button>
+          <button type="button" id="profile-export" class="ghost profile-icon-btn" title="Profile exportieren">
+            <span aria-hidden="true">💾</span>
+            <span class="sr-only">Profile exportieren</span>
+          </button>
+          <button type="button" id="profile-import" class="ghost profile-icon-btn" title="Profile importieren">
+            <span aria-hidden="true">📥</span>
+            <span class="sr-only">Profile importieren</span>
+          </button>
         </div>
         <input id="profile-import-file" type="file" accept="application/json" hidden />
         <p id="profile-data-status" class="profile-data-status" role="status" aria-live="polite"></p>
