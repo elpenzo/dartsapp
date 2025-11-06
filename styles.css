@@ -93,15 +93,15 @@ body.play-view .scoreboard {
   grid-column: span 2;
 }
 
-.play-view .voice-console,
-body.play-view .voice-console {
+.play-view .scoreboard-detail,
+body.play-view .scoreboard-detail {
   order: 2;
+  grid-column: span 2;
 }
 
-.play-view .history,
-body.play-view .history {
+.play-view .voice-console,
+body.play-view .voice-console {
   order: 3;
-  grid-column: span 2;
 }
 
 .tournament-card {
@@ -116,12 +116,14 @@ body.tournament-view .tournament-card {
 
 .tournament-view .setup-card,
 .tournament-view .scoreboard,
+.tournament-view .scoreboard-detail,
 .tournament-view .voice-console,
 .tournament-view .history,
 .tournament-view .profile-manager,
 .tournament-view .leaderboard-card,
 body.tournament-view .setup-card,
 body.tournament-view .scoreboard,
+body.tournament-view .scoreboard-detail,
 body.tournament-view .voice-console,
 body.tournament-view .history,
 body.tournament-view .profile-manager,
@@ -196,6 +198,7 @@ body.profiles-view .app-main {
 
 .profiles-view .setup-card,
 .profiles-view .scoreboard,
+.profiles-view .scoreboard-detail,
 .profiles-view .voice-console,
 .profiles-view .history {
   display: none;
@@ -219,6 +222,7 @@ body.leaderboard-view .app-main {
 
 .leaderboard-view .setup-card,
 .leaderboard-view .scoreboard,
+.leaderboard-view .scoreboard-detail,
 .leaderboard-view .voice-console,
 .leaderboard-view .history,
 .leaderboard-view .profile-manager {
@@ -699,6 +703,17 @@ button.ghost {
 .scoreboard-grid {
   display: grid;
   gap: 0.75rem;
+}
+
+.scoreboard-detail {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 1rem;
+}
+
+.scoreboard-detail > .card {
+  height: 100%;
 }
 
 .scoreboard-header {

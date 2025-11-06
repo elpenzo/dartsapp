@@ -348,9 +348,15 @@
       </section>
     </section>
 
-    <section id="scoreboard-heatmap" class="card scoreboard-heatmap" aria-live="polite" hidden>
-      <p class="heatmap-empty">Heatmap wird angezeigt, sobald Wurfdaten vorliegen.</p>
-    </section>
+    <div class="scoreboard-detail">
+      <section id="scoreboard-heatmap" class="card scoreboard-heatmap" aria-live="polite" hidden>
+        <p class="heatmap-empty">Heatmap wird angezeigt, sobald Wurfdaten vorliegen.</p>
+      </section>
+      <section class="card history" aria-labelledby="history-title">
+        <h2 id="history-title">Verlauf</h2>
+        <ul id="history-log" class="history-log"></ul>
+      </section>
+    </div>
 
     <section class="card voice-console" aria-labelledby="voice-title">
       <div class="voice-header">
@@ -381,11 +387,6 @@
           </div>
         </div>
       </div>
-    </section>
-
-    <section class="card history" aria-labelledby="history-title">
-      <h2 id="history-title">Verlauf</h2>
-      <ul id="history-log" class="history-log"></ul>
     </section>
 
     <section class="card profile-manager" aria-labelledby="profile-title">
