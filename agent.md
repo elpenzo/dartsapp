@@ -59,7 +59,7 @@
 - **Main**:
   - Linke Spalte: Scoreboard mit Namen, Restpunkten, Checkout-Tipps.
   - Rechte Spalte: VoiceConsole (Status, letzter Befehl, Retry).
-  - Unterhalb: TurnHistory (letzte 5 Eingaben, Scroll).
+  - Unterhalb: TurnHistory (letzte 20 Eingaben, Scroll). Profil Heatmap
 - **Footer**: Controls (Pause, R├╝ckg├ñngig, Einstellungen).
 
 ## Datenmodell (MVP)
@@ -129,6 +129,7 @@ function applyDart(gameState, dartResult) {
 - Heatmap pro Spieler
 - Soundeffekte 180
 - Match- & Turnierverwaltung
+- bei leg starten automatisch auf die Spielansicht springen
 
 
 Ligamodus: Jeder gegen jeden (Round Robin)
