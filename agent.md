@@ -130,13 +130,9 @@ function applyDart(gameState, dartResult) {
 - Soundeffekte 180
 - Match- & Turnierverwaltung
 
-Freies Match: Spieler w├ñhlbar
 
 Ligamodus: Jeder gegen jeden (Round Robin)
 
-Turniermodus: KO-System oder Gruppenphase mit Finalrunde
-
 Spielplan automatisch erstellen
 
-Historie & Ergebnisse archivieren
 

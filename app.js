@@ -1190,6 +1190,13 @@ function render() {
   updateUndoAvailability();
 }
 
+const MAX_DOUBLE_OUT_CHECKOUT = 170;
+const MAX_SINGLE_OUT_CHECKOUT = 180;
+const CHECKOUT_NO_FINISH_TEXT = "Kein Finish";
+const CHECKOUT_SHOTS = createCheckoutShotCatalog();
+const CHECKOUT_DOUBLE_SHOTS = CHECKOUT_SHOTS.filter((shot) => shot.isDouble);
+const CHECKOUT_CACHE = new Map();
+
 function renderScoreboard() {
   const matchConfig = getCurrentMatchConfig();
   const isSetsMode = isSetsModeActive(matchConfig);
@@ -1215,6 +1222,7 @@ function renderScoreboard() {
     const lastNode = fragment.querySelector(".player-last");
     const setsNode = fragment.querySelector(".player-sets");
     const legsNode = fragment.querySelector(".player-legs");
+    const checkoutNode = fragment.querySelector(".player-checkout");
 
     const displayName = getPlayerDisplayName(player);
     nameNode.textContent = displayName;
@@ -1249,6 +1257,18 @@ function renderScoreboard() {
     if (legsNode) {
       legsNode.textContent = String(player.legsThisSet || 0);
     }
+    if (checkoutNode) {
+      const suggestion = getCheckoutSuggestion(player.score, gameState.outMode);
+      if (suggestion) {
+        checkoutNode.textContent = suggestion;
+        checkoutNode.dataset.state = "ready";
+        checkoutNode.title = `Empfohlener Checkout: ${suggestion}`;
+      } else {
+        checkoutNode.textContent = CHECKOUT_NO_FINISH_TEXT;
+        checkoutNode.dataset.state = "none";
+        checkoutNode.removeAttribute("title");
+      }
+    }
 
     if (gameState.activeIndex === index && gameState.legActive) {
       node.classList.add("active");
@@ -1257,10 +1277,187 @@ function renderScoreboard() {
       node.classList.add("winner");
     }
 
-    elements.scoreboard.appendChild(fragment);
+  elements.scoreboard.appendChild(fragment);
   });
 
   updateActivePlayerBanner();
+}
+
+function getCheckoutSuggestion(score, outMode = gameState.outMode) {
+  const numericScore = Number(score);
+  if (!Number.isFinite(numericScore)) {
+    return "";
+  }
+  const requiresDouble = outMode === "double";
+  const cacheKey = `${requiresDouble ? "D" : "S"}:${numericScore}`;
+  if (CHECKOUT_CACHE.has(cacheKey)) {
+    return CHECKOUT_CACHE.get(cacheKey);
+  }
+  const suggestion = computeCheckoutSuggestion(numericScore, requiresDouble);
+  CHECKOUT_CACHE.set(cacheKey, suggestion);
+  return suggestion;
+}
+
+function computeCheckoutSuggestion(score, requiresDouble) {
+  const target = Math.trunc(score);
+  if (target <= 0) {
+    return "";
+  }
+  const maxScore = requiresDouble ? MAX_DOUBLE_OUT_CHECKOUT : MAX_SINGLE_OUT_CHECKOUT;
+  if (target > maxScore) {
+    return "";
+  }
+  const combos = findCheckoutCombos(target, requiresDouble);
+  if (!combos.length) {
+    return "";
+  }
+  return combos[0].map((shot) => shot.display).join(" · ");
+}
+
+function findCheckoutCombos(target, requiresDouble) {
+  const finalShots = requiresDouble ? CHECKOUT_DOUBLE_SHOTS : CHECKOUT_SHOTS;
+  if (!finalShots.length) {
+    return [];
+  }
+  const minFinalScore = finalShots.reduce((min, shot) => Math.min(min, shot.score), Infinity);
+  const combos = [];
+  const seen = new Set();
+
+  const addCombo = (combo) => {
+    const normalized = normalizeCheckoutCombo(combo);
+    const key = normalized.map((shot) => shot.id).join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    combos.push(normalized);
+  };
+
+  finalShots.forEach((finalShot) => {
+    if (finalShot.score === target) {
+      addCombo([finalShot]);
+    }
+  });
+
+  CHECKOUT_SHOTS.forEach((firstShot) => {
+    const remainingAfterFirst = target - firstShot.score;
+    if (remainingAfterFirst < minFinalScore) {
+      return;
+    }
+
+    finalShots.forEach((finalShot) => {
+      if (finalShot.score === remainingAfterFirst) {
+        addCombo([firstShot, finalShot]);
+      }
+    });
+
+    CHECKOUT_SHOTS.forEach((secondShot) => {
+      const remainingAfterSecond = remainingAfterFirst - secondShot.score;
+      if (remainingAfterSecond < minFinalScore) {
+        return;
+      }
+      finalShots.forEach((finalShot) => {
+        if (finalShot.score === remainingAfterSecond) {
+          addCombo([firstShot, secondShot, finalShot]);
+        }
+      });
+    });
+  });
+
+  combos.sort(compareCheckoutCombos);
+  return combos;
+}
+
+function normalizeCheckoutCombo(combo) {
+  if (combo.length <= 1) {
+    return combo.slice();
+  }
+  const finalShot = combo[combo.length - 1];
+  const opening = combo
+    .slice(0, combo.length - 1)
+    .sort((a, b) => shotPriorityValue(b) - shotPriorityValue(a));
+  return [...opening, finalShot];
+}
+
+function compareCheckoutCombos(a, b) {
+  if (a.length !== b.length) {
+    return a.length - b.length;
+  }
+  const maxSlots = Math.max(a.length, b.length, 3);
+  for (let i = 0; i < maxSlots; i += 1) {
+    const shotA = a[i];
+    const shotB = b[i];
+    const priorityA = shotA ? shotPriorityValue(shotA) : -1;
+    const priorityB = shotB ? shotPriorityValue(shotB) : -1;
+    if (priorityA !== priorityB) {
+      return priorityB - priorityA;
+    }
+  }
+  const totalA = a.reduce((sum, shot) => sum + shot.score, 0);
+  const totalB = b.reduce((sum, shot) => sum + shot.score, 0);
+  if (totalA !== totalB) {
+    return totalB - totalA;
+  }
+  const labelA = a.map((shot) => shot.display).join("");
+  const labelB = b.map((shot) => shot.display).join("");
+  return labelA.localeCompare(labelB, "de-DE");
+}
+
+function shotPriorityValue(shot) {
+  const kindPriority = {
+    T: 5,
+    D: 4,
+    DB: 4,
+    S: 3,
+    SB: 2,
+  };
+  const weight = kindPriority[shot.kind] || 0;
+  return weight * 100 + shot.base;
+}
+
+function createCheckoutShotCatalog() {
+  const shots = [];
+  for (let value = 1; value <= 20; value += 1) {
+    shots.push({
+      id: `S${value}`,
+      score: value,
+      display: `${value}`,
+      kind: "S",
+      base: value,
+      isDouble: false,
+    });
+    shots.push({
+      id: `D${value}`,
+      score: value * 2,
+      display: `D${value}`,
+      kind: "D",
+      base: value,
+      isDouble: true,
+    });
+    shots.push({
+      id: `T${value}`,
+      score: value * 3,
+      display: `T${value}`,
+      kind: "T",
+      base: value,
+      isDouble: false,
+    });
+  }
+  shots.push({
+    id: "SB25",
+    score: 25,
+    display: "25",
+    kind: "SB",
+    base: 25,
+    isDouble: false,
+  });
+  shots.push({
+    id: "DB25",
+    score: 50,
+    display: "Bull",
+    kind: "DB",
+    base: 25,
+    isDouble: true,
+  });
+  return shots;
 }
 
 function renderHistory() {
