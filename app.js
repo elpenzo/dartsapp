@@ -1819,7 +1819,7 @@ function renderDartboardPicker() {
   numbersGroup.setAttribute("class", "dartboard-numbers");
 
   DARTBOARD_NUMBERS.forEach((number, index) => {
-    const angle = -90 + index * segmentAngle;
+    const angle = index * segmentAngle;
     const { x, y } = polarToCartesian(189, angle);
     const text = document.createElementNS(svgNS, "text");
     text.setAttribute("x", x.toFixed(2));
@@ -1838,10 +1838,15 @@ function updateDartPickerView() {
   const isBoard = gameState.dartNumberOrder === "dartboard";
   if (elements.dartNumberGrid) {
     elements.dartNumberGrid.hidden = isBoard;
+    if (isBoard) {
+      elements.dartNumberGrid.innerHTML = "";
+      elements.dartNumberButtons = [];
+    }
   }
   if (elements.dartboardPicker) {
     elements.dartboardPicker.hidden = !isBoard;
   }
+  elements.dartPicker?.classList.toggle("board-mode", isBoard);
 
   if (isBoard) {
     renderDartboardPicker();
