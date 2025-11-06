@@ -1229,7 +1229,10 @@ const CHECKOUT_DOUBLE_SHOTS = CHECKOUT_SHOTS.filter((shot) => shot.isDouble);
 const CHECKOUT_CACHE = new Map();
 let audioContext = null;
 <<<<<<< HEAD
+<<<<<<< HEAD
 let currentDartNumberOrder = [];
+=======
+>>>>>>> df4d9457abaec47125ad0c13e740d05377d33eea
 =======
 >>>>>>> df4d9457abaec47125ad0c13e740d05377d33eea
 
