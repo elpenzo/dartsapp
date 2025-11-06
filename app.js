@@ -90,6 +90,8 @@ const elements = {
   profileFirstName: document.getElementById("profile-first-name"),
   profileLastName: document.getElementById("profile-last-name"),
   profileNickname: document.getElementById("profile-nickname"),
+  profileIdInput: document.getElementById("profile-id"),
+  profileSubmitBtn: document.getElementById("profile-submit"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
   leaderboardBody: document.getElementById("leaderboard-body"),
@@ -147,6 +149,7 @@ const gameState = {
 
 let profiles = [];
 let pendingProfileImage = null;
+let editingProfileId = null;
 const PROFILES_API_URL = "/api/profiles";
 let pendingServerSync = null;
 let serverSyncDisabled = false;
@@ -2094,6 +2097,40 @@ function onProfileFormSubmit(event) {
     return;
   }
 
+  const submittedId = (elements.profileIdInput?.value || "").toString().trim();
+  const targetId = editingProfileId || submittedId;
+  const isEditing = Boolean(targetId);
+
+  if (isEditing) {
+    const profile = getProfileById(targetId);
+    if (!profile) {
+      notifyVoiceStatus("error", "Profil konnte nicht gefunden werden");
+      resetProfileForm(true);
+      return;
+    }
+
+    profile.firstName = firstName;
+    profile.lastName = lastName;
+    profile.nickname = nickname;
+    if (pendingProfileImage !== null) {
+      profile.image = pendingProfileImage || "";
+    }
+    profile.updatedAt = Date.now();
+
+    saveProfiles();
+    renderProfileOptions();
+    renderProfileList();
+    const playersUpdated = refreshPlayersForProfile(profile.id);
+    handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
+    handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+    resetProfileForm();
+    if (playersUpdated) {
+      render();
+    }
+    notifyVoiceStatus("success", "Profil aktualisiert");
+    return;
+  }
+
   const profile = {
     id: uid(),
     firstName,
@@ -2103,8 +2140,10 @@ function onProfileFormSubmit(event) {
     stats: {
       gamesPlayed: 0,
       legsWon: 0,
+      setsWon: 0,
       totalPoints: 0,
       totalDarts: 0,
+      dartHistogram: createEmptyHistogram(),
     },
     history: [],
     createdAt: Date.now(),
@@ -2117,6 +2156,7 @@ function onProfileFormSubmit(event) {
   resetProfileForm();
   handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
   handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+  notifyVoiceStatus("success", "Profil gespeichert");
 }
 
 function onProfileImageChange(event) {
@@ -2141,9 +2181,18 @@ function onProfileImageChange(event) {
 }
 
 function resetProfileForm(skipFields = false) {
+  editingProfileId = null;
   pendingProfileImage = null;
-  if (!skipFields && elements.profileForm) {
-    elements.profileForm.reset();
+
+  if (elements.profileForm) {
+    elements.profileForm.dataset.mode = "create";
+    if (!skipFields) {
+      elements.profileForm.reset();
+    }
+  }
+
+  if (elements.profileIdInput) {
+    elements.profileIdInput.value = "";
   }
   if (elements.profileImageInput) {
     elements.profileImageInput.value = "";
@@ -2152,6 +2201,117 @@ function resetProfileForm(skipFields = false) {
     elements.profileImagePreview.src = "";
     elements.profileImagePreview.hidden = true;
   }
+  if (elements.profileSubmitBtn) {
+    elements.profileSubmitBtn.textContent = "Profil speichern";
+  }
+  if (elements.profileResetBtn) {
+    elements.profileResetBtn.textContent = "Zurücksetzen";
+  }
+}
+
+function startProfileEdit(profileId) {
+  const profile = getProfileById(profileId);
+  if (!profile) return;
+
+  setViewMode("profiles");
+
+  editingProfileId = profileId;
+  pendingProfileImage = profile.image || "";
+
+  if (elements.profileForm) {
+    elements.profileForm.dataset.mode = "edit";
+  }
+  if (elements.profileIdInput) {
+    elements.profileIdInput.value = profileId;
+  }
+  if (elements.profileFirstName) {
+    elements.profileFirstName.value = profile.firstName || "";
+  }
+  if (elements.profileLastName) {
+    elements.profileLastName.value = profile.lastName || "";
+  }
+  if (elements.profileNickname) {
+    elements.profileNickname.value = profile.nickname || "";
+  }
+  if (elements.profileImageInput) {
+    elements.profileImageInput.value = "";
+  }
+  if (elements.profileImagePreview) {
+    if (profile.image) {
+      elements.profileImagePreview.src = profile.image;
+      elements.profileImagePreview.hidden = false;
+    } else {
+      elements.profileImagePreview.src = "";
+      elements.profileImagePreview.hidden = true;
+    }
+  }
+  if (elements.profileSubmitBtn) {
+    elements.profileSubmitBtn.textContent = "Änderungen speichern";
+  }
+  if (elements.profileResetBtn) {
+    elements.profileResetBtn.textContent = "Abbrechen";
+  }
+  requestAnimationFrame(() => {
+    elements.profileForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+    elements.profileFirstName?.focus();
+  });
+}
+
+function refreshPlayersForProfile(profileId) {
+  if (!profileId) return false;
+  const profile = getProfileById(profileId);
+  if (!profile) return false;
+
+  const displayName = getProfileDisplayName(profile);
+  const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
+  const photo = profile.image || "";
+  let updated = false;
+
+  gameState.players.forEach((player) => {
+    if (player.profileId === profileId) {
+      player.displayName = displayName;
+      player.fullName = fullName;
+      player.photo = photo || null;
+      const playerDisplay = getPlayerDisplayName(player);
+      gameState.history.forEach((entry) => {
+        if (entry.playerId === player.id) {
+          entry.playerName = playerDisplay;
+        }
+      });
+      gameState.snapshots.forEach((snapshot) => {
+        if (!snapshot?.players) return;
+        snapshot.players.forEach((snapPlayer) => {
+          if (snapPlayer.profileId === profileId) {
+            snapPlayer.displayName = displayName;
+            snapPlayer.fullName = fullName;
+            snapPlayer.photo = photo || null;
+          }
+        });
+      });
+      updated = true;
+    }
+  });
+
+  return updated;
+}
+
+function resetProfileStats(profileId) {
+  const profile = getProfileById(profileId);
+  if (!profile) return;
+  if (!window.confirm(`Statistiken von "${getProfileDisplayName(profile)}" zurücksetzen?`)) return;
+  ensureProfileStats(profile);
+  profile.stats.gamesPlayed = 0;
+  profile.stats.legsWon = 0;
+  profile.stats.setsWon = 0;
+  profile.stats.totalPoints = 0;
+  profile.stats.totalDarts = 0;
+  profile.stats.dartHistogram = createEmptyHistogram();
+  profile.history = [];
+  profile.updatedAt = Date.now();
+  saveProfiles();
+  renderProfileList();
+  renderLeaderboard();
+  notifyVoiceStatus("success", "Statistiken zurückgesetzt");
 }
 
 function onProfileListClick(event) {
@@ -2163,6 +2323,16 @@ function onProfileListClick(event) {
 
   if (action === "assign") {
     assignProfileToSlot(profileId, Number(button.dataset.slot) || 1);
+    return;
+  }
+
+  if (action === "edit") {
+    startProfileEdit(profileId);
+    return;
+  }
+
+  if (action === "reset-stats") {
+    resetProfileStats(profileId);
     return;
   }
 
@@ -2334,6 +2504,8 @@ function renderProfileList() {
           ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
           ${heatmapMarkup}
           <div class="profile-actions-inline">
+            <button type="button" class="ghost" data-action="edit" data-id="${profile.id}">Bearbeiten</button>
+            <button type="button" class="ghost" data-action="reset-stats" data-id="${profile.id}">Statistiken zurücksetzen</button>
             <button type="button" class="ghost" data-action="assign" data-slot="1" data-id="${profile.id}">Als Spieler 1 wählen</button>
             <button type="button" class="ghost" data-action="assign" data-slot="2" data-id="${profile.id}">Als Spieler 2 wählen</button>
             <button type="button" class="ghost danger" data-action="delete" data-id="${profile.id}">Löschen</button>

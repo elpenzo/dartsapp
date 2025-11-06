@@ -384,7 +384,7 @@
 
     <section class="card profile-manager" aria-labelledby="profile-title">
       <h2 id="profile-title">Spielerprofile</h2>
-      <form id="profile-form" class="profile-form">
+      <form id="profile-form" class="profile-form" data-mode="create">
         <div class="profile-form-grid">
           <div class="form-row">
             <label for="profile-first-name">Vorname</label>
@@ -406,8 +406,9 @@
         <div class="profile-image-preview">
           <img id="profile-image-preview" alt="Profilbild Vorschau" hidden />
         </div>
+        <input id="profile-id" name="profileId" type="hidden" />
         <div class="form-actions profile-actions">
-          <button type="submit" class="primary">Profil speichern</button>
+          <button type="submit" id="profile-submit" class="primary">Profil speichern</button>
           <button type="reset" id="profile-reset" class="ghost">Zurücksetzen</button>
         </div>
       </form>
@@ -479,9 +480,9 @@
           <dt>Letzter Wurf</dt>
           <dd class="player-last">-</dd>
         </div>
-        <div class="player-checkout-wrapper">
+        <div class="player-checkout-wrapper" hidden>
           <dt>Checkout</dt>
-          <dd class="player-checkout" data-state="none">Kein Finish</dd>
+          <dd class="player-checkout" data-state="none"></dd>
         </div>
       </dl>
     </article>
