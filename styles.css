@@ -72,9 +72,10 @@ body {
 
 .play-view .app-main,
 body.play-view .app-main {
-  width: min(1200px, 96vw);
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  width: min(1400px, 98vw);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 1.25rem;
+  align-items: start;
 }
 
 .play-view .setup-card,
@@ -90,18 +91,23 @@ body.play-view .active-player-banner {
 .play-view .scoreboard,
 body.play-view .scoreboard {
   order: 1;
-  grid-column: span 2;
+  grid-column: 1 / 2;
+  height: 100%;
 }
 
 .play-view .scoreboard-detail,
 body.play-view .scoreboard-detail {
-  order: 2;
-  grid-column: span 2;
+  order: 1;
+  grid-column: 2 / 3;
+  grid-row: 1;
+  align-self: stretch;
+  margin-top: 0;
 }
 
 .play-view .voice-console,
 body.play-view .voice-console {
-  order: 3;
+  order: 2;
+  grid-column: 1 / span 2;
 }
 
 .tournament-card {
@@ -706,14 +712,50 @@ button.ghost {
 }
 
 .scoreboard-detail {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   margin-top: 1rem;
 }
 
 .scoreboard-detail > .card {
+  flex: 1 1 auto;
   height: 100%;
+  min-height: 0;
+}
+
+.scoreboard-detail .history {
+  display: flex;
+  flex-direction: column;
+}
+
+.scoreboard-detail .history-log {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+@media (max-width: 1100px) {
+  .play-view .app-main,
+  body.play-view .app-main {
+    grid-template-columns: 1fr;
+  }
+
+  .play-view .scoreboard,
+  body.play-view .scoreboard {
+    grid-column: 1;
+  }
+
+  .play-view .scoreboard-detail,
+  body.play-view .scoreboard-detail {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 1rem;
+  }
+
+  .play-view .voice-console,
+  body.play-view .voice-console {
+    grid-column: 1;
+  }
 }
 
 .scoreboard-header {
@@ -883,6 +925,22 @@ body.play-view .player-card.active {
   margin: 0.15rem 0 0;
   font-size: 1.5rem;
   font-weight: 700;
+}
+
+.player-last-wrapper {
+  flex: 0 1 140px;
+  min-width: 120px;
+}
+
+.player-last-wrapper dt {
+  margin-left: 0;
+}
+
+.player-last {
+  font-size: 1.15rem;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
 }
 
 .player-checkout-wrapper dd {
