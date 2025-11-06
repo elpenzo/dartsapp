@@ -15,6 +15,7 @@
     <div class="view-toggle" role="group" aria-label="Ansicht wählen">
       <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
       <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+      <button type="button" class="view-toggle-btn" data-view="tournament">Turnier</button>
       <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
       <button type="button" class="view-toggle-btn" data-view="leaderboard">Leaderboard</button>
     </div>
@@ -70,6 +71,100 @@
           <button type="button" id="reset-btn" class="ghost">Zurücksetzen</button>
         </div>
       </form>
+    </section>
+
+    <section class="card tournament-card" aria-labelledby="tournament-title">
+      <h2 id="tournament-title">Turniermodus</h2>
+      <p class="tournament-intro">
+        Richte ein K.-o.-Turnier mit bis zu 16 Spielern aus. Die Gewinner jeder Runde steigen automatisch in das
+        Viertel-, Halbfinale und Finale auf.
+      </p>
+      <form id="tournament-form" class="tournament-form">
+        <div class="tournament-grid">
+          <div class="form-row">
+            <label for="tournament-player-1">Spieler 1</label>
+            <input id="tournament-player-1" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-2">Spieler 2</label>
+            <input id="tournament-player-2" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-3">Spieler 3</label>
+            <input id="tournament-player-3" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-4">Spieler 4</label>
+            <input id="tournament-player-4" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-5">Spieler 5</label>
+            <input id="tournament-player-5" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-6">Spieler 6</label>
+            <input id="tournament-player-6" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-7">Spieler 7</label>
+            <input id="tournament-player-7" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-8">Spieler 8</label>
+            <input id="tournament-player-8" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-9">Spieler 9</label>
+            <input id="tournament-player-9" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-10">Spieler 10</label>
+            <input id="tournament-player-10" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-11">Spieler 11</label>
+            <input id="tournament-player-11" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-12">Spieler 12</label>
+            <input id="tournament-player-12" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-13">Spieler 13</label>
+            <input id="tournament-player-13" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-14">Spieler 14</label>
+            <input id="tournament-player-14" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-15">Spieler 15</label>
+            <input id="tournament-player-15" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+          <div class="form-row">
+            <label for="tournament-player-16">Spieler 16</label>
+            <input id="tournament-player-16" class="tournament-player-input" type="text" autocomplete="off" />
+          </div>
+        </div>
+        <div class="tournament-controls">
+          <div class="form-row">
+            <label for="tournament-match-mode">Matchmodus</label>
+            <select id="tournament-match-mode" name="tournamentMatchMode">
+              <option value="single" selected>Einzel-Leg</option>
+              <option value="bestOfThreeLegs">Saetze (Best of 3 Legs, 2 Saetze zum Sieg)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions tournament-actions">
+          <button type="submit" class="primary">Turnier starten</button>
+          <button type="button" id="tournament-reset" class="ghost">Formular leeren</button>
+        </div>
+      </form>
+      <div id="tournament-status" class="tournament-status" aria-live="polite"></div>
+      <div class="tournament-bracket-wrapper">
+        <h3>Turnierbaum</h3>
+        <div id="tournament-bracket" class="tournament-bracket" aria-live="polite"></div>
+      </div>
     </section>
 
     <section class="card scoreboard" aria-labelledby="scoreboard-title">

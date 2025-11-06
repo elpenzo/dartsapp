@@ -28,6 +28,13 @@ const MATCH_MODES = {
   },
 };
 const DEFAULT_MATCH_MODE = "single";
+const MAX_TOURNAMENT_PLAYERS = 16;
+const TOURNAMENT_ROUNDS = [
+  { id: "roundOf16", label: "Achtelfinale" },
+  { id: "quarterfinals", label: "Viertelfinale" },
+  { id: "semifinals", label: "Halbfinale" },
+  { id: "final", label: "Finale" },
+];
 const DART_SWIPE_MIN_DISTANCE = 30;
 const DART_SWIPE_PREVIEW_THRESHOLD = 12;
 const DART_SWIPE_MAX_OFFSET = 18;
@@ -66,6 +73,13 @@ const elements = {
   dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
   comboButtons: Array.from(document.querySelectorAll(".combo-button")),
   viewToggleButtons: Array.from(document.querySelectorAll(".view-toggle-btn")),
+  tournamentCard: document.querySelector(".tournament-card"),
+  tournamentForm: document.getElementById("tournament-form"),
+  tournamentResetBtn: document.getElementById("tournament-reset"),
+  tournamentMatchModeSelect: document.getElementById("tournament-match-mode"),
+  tournamentPlayerInputs: Array.from(document.querySelectorAll(".tournament-player-input")),
+  tournamentStatus: document.getElementById("tournament-status"),
+  tournamentBracket: document.getElementById("tournament-bracket"),
   profileManager: document.querySelector(".profile-manager"),
   profileForm: document.getElementById("profile-form"),
   profileList: document.getElementById("profile-list"),
@@ -88,6 +102,24 @@ const voiceControlState = {
   wakeTimer: null,
 };
 
+function createInitialTournamentState() {
+  return {
+    active: false,
+    status: "idle",
+    players: [],
+    startingScore: DEFAULT_STARTING_SCORE,
+    outMode: DEFAULT_OUT_MODE,
+    matchMode: DEFAULT_MATCH_MODE,
+    rounds: [],
+    matchLookup: {},
+    currentRoundIndex: null,
+    currentMatchIndex: null,
+    currentMatchId: null,
+    championId: null,
+    nextMatchTimer: null,
+  };
+}
+
 const gameState = {
   players: [],
   activeIndex: 0,
@@ -109,6 +141,7 @@ const gameState = {
   legStarterIndex: 0,
   lastLegWinnerId: null,
   matchCompleted: false,
+  tournament: createInitialTournamentState(),
 };
 
 let profiles = [];
@@ -275,6 +308,7 @@ function handleLegWin(player) {
     gameState.matchCompleted = true;
     notifyVoiceStatus("success", `${displayName} gewinnt das Match`);
     finalizeGameStats();
+    handleTournamentMatchCompletion(player);
     return;
   }
 
@@ -362,6 +396,12 @@ async function initialize() {
       button.addEventListener("click", () => setViewMode(button.dataset.view));
     });
   }
+  if (elements.tournamentForm) {
+    elements.tournamentForm.addEventListener("submit", onTournamentSubmit);
+  }
+  if (elements.tournamentResetBtn) {
+    elements.tournamentResetBtn.addEventListener("click", resetTournamentForm);
+  }
   if (elements.dartPicker) {
     initializeDartPicker();
     elements.dartPicker.addEventListener("click", onDartPickerClick);
@@ -417,6 +457,8 @@ async function initialize() {
   }
 
   resetGame();
+  renderTournamentBracket();
+  setTournamentStatus("Kein Turnier aktiv.", "idle");
 }
 
 function onSetupSubmit(event) {
@@ -443,14 +485,17 @@ function startGame(
   matchMode = DEFAULT_MATCH_MODE
 ) {
   const configs = Array.isArray(playerConfigs)
-    ? playerConfigs.map((entry, index) =>
-        typeof entry === "string"
-          ? { name: entry, profileId: "" }
-          : {
-              name: (entry.name || entry.displayName || `Player ${index + 1}`).trim(),
-              profileId: entry.profileId || "",
-            }
-      )
+    ? playerConfigs.map((entry, index) => {
+        if (typeof entry === "string") {
+          return { name: entry.trim(), profileId: "" };
+        }
+        const normalizedName = (entry.name || entry.displayName || `Player ${index + 1}`).trim();
+        return {
+          ...entry,
+          name: normalizedName,
+          profileId: entry.profileId || "",
+        };
+      })
     : [];
 
   if (!configs.length) {
@@ -471,6 +516,8 @@ function startGame(
       fullName,
       profileId: profile ? profile.id : "",
       photo,
+      tournamentPlayerId: config.tournamentPlayerId || null,
+      tournamentSeed: config.tournamentSeed || null,
       score: startingScore,
       history: [],
       lastTurn: null,
@@ -1127,7 +1174,9 @@ function renderScoreboard() {
   const isSetsMode = isSetsModeActive(matchConfig);
   if (elements.gameSettings) {
     const matchLabel = matchConfig.label || MATCH_MODES[DEFAULT_MATCH_MODE].label;
-    elements.gameSettings.textContent = `Modus: ${gameState.startingScore} Punkte - ${outModeLabel()} - Match: ${matchLabel}`;
+    const tournamentLabel = getActiveTournamentMatchLabel();
+    const tournamentSuffix = tournamentLabel ? ` - Turnier: ${tournamentLabel}` : "";
+    elements.gameSettings.textContent = `Modus: ${gameState.startingScore} Punkte - ${outModeLabel()} - Match: ${matchLabel}${tournamentSuffix}`;
   }
   document.body.classList.toggle("sets-mode", isSetsMode);
 
@@ -1574,7 +1623,8 @@ function finalizeGameStats() {
 }
 
 function setViewMode(view) {
-  const normalized = ["play", "profiles", "leaderboard"].includes(view) ? view : "setup";
+  const allowedViews = ["setup", "play", "tournament", "profiles", "leaderboard"];
+  const normalized = allowedViews.includes(view) ? view : "setup";
   if (gameState.viewMode === normalized) {
     updateViewModeUI();
     return;
@@ -1599,6 +1649,7 @@ function setViewMode(view) {
 function updateViewModeUI() {
   const currentView = gameState.viewMode;
   document.body.classList.toggle("play-view", currentView === "play");
+  document.body.classList.toggle("tournament-view", currentView === "tournament");
   document.body.classList.toggle("profiles-view", currentView === "profiles");
   document.body.classList.toggle("leaderboard-view", currentView === "leaderboard");
   elements.viewToggleButtons.forEach((button) => {
@@ -1608,6 +1659,8 @@ function updateViewModeUI() {
   });
   if (currentView === "play") {
     updateActivePlayerBanner();
+  } else if (currentView === "tournament") {
+    renderTournamentBracket();
   } else if (currentView === "leaderboard") {
     renderLeaderboard();
   }
@@ -2199,6 +2252,582 @@ function renderLeaderboard() {
   });
 
   elements.leaderboardBody.appendChild(fragment);
+}
+
+function setTournamentStatus(message, state = "idle") {
+  if (!elements.tournamentStatus) return;
+  elements.tournamentStatus.textContent = message;
+  elements.tournamentStatus.dataset.state = state;
+}
+
+function clearTournamentMatchTimer() {
+  const tournament = gameState.tournament;
+  if (tournament?.nextMatchTimer) {
+    clearTimeout(tournament.nextMatchTimer);
+    tournament.nextMatchTimer = null;
+  }
+}
+
+function resetTournamentForm() {
+  const tournament = gameState.tournament;
+  if (tournament?.status === "in-progress") {
+    setTournamentStatus("Match laeuft - Reset nach Matchende moeglich.", "error");
+    return;
+  }
+  clearTournamentMatchTimer();
+  if (Array.isArray(elements.tournamentPlayerInputs)) {
+    elements.tournamentPlayerInputs.forEach((input) => {
+      if (input) {
+        input.value = "";
+      }
+    });
+  }
+  gameState.tournament = createInitialTournamentState();
+  renderTournamentBracket();
+  setTournamentStatus("Kein Turnier aktiv.", "idle");
+}
+
+function collectTournamentPlayerEntries() {
+  if (!Array.isArray(elements.tournamentPlayerInputs)) return [];
+  return elements.tournamentPlayerInputs
+    .map((input, index) => ({
+      name: typeof input?.value === "string" ? input.value.trim() : "",
+      seed: index + 1,
+    }))
+    .filter((entry) => entry.name.length);
+}
+
+function onTournamentSubmit(event) {
+  event.preventDefault();
+  const entries = collectTournamentPlayerEntries();
+  if (entries.length < 2) {
+    setTournamentStatus("Mindestens zwei Spieler eingeben.", "error");
+    return;
+  }
+
+  const players = entries.slice(0, MAX_TOURNAMENT_PLAYERS).map((entry, index) => ({
+    id: `tp${index + 1}`,
+    name: entry.name,
+    seed: entry.seed,
+  }));
+
+  const matchModeValue = elements.tournamentMatchModeSelect?.value;
+  const matchMode = MATCH_MODES[matchModeValue] ? matchModeValue : DEFAULT_MATCH_MODE;
+  const startingScore =
+    parseInt(elements.startingScoreSelect?.value, 10) || DEFAULT_STARTING_SCORE;
+  const outModeRaw = elements.outModeSelect?.value;
+  const outMode = OUT_MODE_LABELS[outModeRaw] ? outModeRaw : DEFAULT_OUT_MODE;
+
+  const tournament = createInitialTournamentState();
+  tournament.active = true;
+  tournament.players = players;
+  tournament.matchMode = matchMode;
+  tournament.startingScore = startingScore;
+  tournament.outMode = outMode;
+
+  const structure = buildTournamentStructure(players);
+  tournament.rounds = structure.rounds;
+  tournament.matchLookup = structure.matchLookup;
+
+  resolveTournamentByes(tournament);
+  if (!tournament.championId) {
+    tournament.status = "pending";
+  }
+  gameState.tournament = tournament;
+
+  renderTournamentBracket();
+
+  const nextMatch = findNextTournamentMatch(tournament);
+  if (nextMatch) {
+    launchTournamentMatch(nextMatch);
+    return;
+  }
+
+  if (tournament.championId) {
+    const championName = getTournamentPlayerName(tournament, tournament.championId);
+    tournament.status = "complete";
+    setTournamentStatus(`Champion: ${championName}`, "complete");
+  } else {
+    setTournamentStatus("Turnier erstellt. Warte auf die erste Begegnung.", "pending");
+  }
+  setViewMode("tournament");
+}
+
+function buildTournamentStructure(players) {
+  const sanitized = Array.isArray(players) ? players.slice(0, MAX_TOURNAMENT_PLAYERS) : [];
+  if (!sanitized.length) {
+    return { rounds: [], matchLookup: {} };
+  }
+
+  const participantCount = sanitized.length;
+  const minParticipants = Math.max(participantCount, 2);
+  const exponent = Math.max(
+    1,
+    Math.ceil(Math.log2(Math.min(MAX_TOURNAMENT_PLAYERS, minParticipants)))
+  );
+  const bracketSize = Math.min(MAX_TOURNAMENT_PLAYERS, 2 ** exponent);
+  const roundsToUse = TOURNAMENT_ROUNDS.slice(TOURNAMENT_ROUNDS.length - exponent);
+
+  const slots = new Array(bracketSize).fill(null);
+  sanitized.forEach((player, index) => {
+    if (index < slots.length) {
+      slots[index] = player;
+    }
+  });
+
+  const rounds = [];
+  const matchLookup = {};
+  let previousMatches = null;
+  let workingSlots = slots;
+
+  roundsToUse.forEach((roundDef) => {
+    const roundIndex = rounds.length;
+    const matches = [];
+
+    for (let slotIndex = 0; slotIndex < workingSlots.length; slotIndex += 2) {
+      const first = workingSlots[slotIndex] || null;
+      const second = workingSlots[slotIndex + 1] || null;
+      const match = {
+        id: `${roundDef.id}-${matches.length + 1}`,
+        roundId: roundDef.id,
+        players: [
+          first ? { participantId: first.id, name: first.name, seed: first.seed } : null,
+          second ? { participantId: second.id, name: second.name, seed: second.seed } : null,
+        ],
+        winnerId: null,
+        status: first || second ? "pending" : "empty",
+        nextMatchId: null,
+        nextMatchSlot: null,
+      };
+      matches.push(match);
+      matchLookup[match.id] = { roundIndex, matchIndex: matches.length - 1 };
+    }
+
+    if (previousMatches) {
+      previousMatches.forEach((prevMatch, index) => {
+        const target = matches[Math.floor(index / 2)];
+        if (!target) return;
+        const slotIndex = index % 2;
+        prevMatch.nextMatchId = target.id;
+        prevMatch.nextMatchSlot = slotIndex;
+        if (!Array.isArray(target.players)) {
+          target.players = [null, null];
+        }
+        const existingSlot = target.players[slotIndex];
+        if (existingSlot && typeof existingSlot === "object") {
+          target.players[slotIndex] = {
+            participantId: existingSlot.participantId || null,
+            name: existingSlot.name || "",
+            seed: existingSlot.seed || null,
+            sourceMatchId: prevMatch.id,
+          };
+        } else {
+          target.players[slotIndex] = {
+            participantId: null,
+            name: "",
+            seed: null,
+            sourceMatchId: prevMatch.id,
+          };
+        }
+      });
+    }
+
+    rounds.push({
+      id: roundDef.id,
+      label: roundDef.label,
+      matches,
+    });
+
+    previousMatches = matches;
+    workingSlots = matches.map(() => null);
+  });
+
+  return { rounds, matchLookup };
+}
+
+function autoAdvanceTournamentByes(tournament) {
+  let changed = false;
+  tournament.rounds.forEach((round) => {
+    round.matches.forEach((match) => {
+      if (!match) return;
+      if (match.status === "completed" || match.status === "in-progress") return;
+      const slots = Array.isArray(match.players) ? match.players : [];
+      const first = slots[0];
+      const second = slots[1];
+      const hasFirst = Boolean(first?.participantId);
+      const hasSecond = Boolean(second?.participantId);
+      if (!hasFirst && !hasSecond) {
+        match.status = "empty";
+        return;
+      }
+      if (hasFirst && hasSecond) {
+        if (match.status === "empty") {
+          match.status = "pending";
+        }
+        return;
+      }
+
+      const winnerSlot = hasFirst ? first : second;
+      const missingSlot = hasFirst ? second : first;
+      if (!winnerSlot) return;
+
+      let canAutoAdvance = true;
+      const sourceMatchId = missingSlot?.sourceMatchId;
+      if (sourceMatchId) {
+        const sourceMatch = getTournamentMatchById(tournament, sourceMatchId);
+        if (sourceMatch) {
+          const sourceMayProduceOpponent =
+            sourceMatch.status === "pending" ||
+            sourceMatch.status === "in-progress" ||
+            (sourceMatch.status === "completed" && sourceMatch.winnerId);
+          if (sourceMayProduceOpponent) {
+            canAutoAdvance = false;
+          }
+        }
+      }
+
+      if (!canAutoAdvance) {
+        if (match.status === "empty") {
+          match.status = "pending";
+        }
+        return;
+      }
+
+      if (match.winnerId === winnerSlot.participantId && match.status === "auto-advanced") {
+        return;
+      }
+      match.winnerId = winnerSlot.participantId;
+      match.status = "auto-advanced";
+      propagateTournamentWinner(tournament, match, winnerSlot.participantId);
+      changed = true;
+    });
+  });
+  return changed;
+}
+
+function resolveTournamentByes(tournament) {
+  if (!tournament) return;
+  while (autoAdvanceTournamentByes(tournament)) {
+    // repeat until no additional auto-advances occur
+  }
+}
+
+function getTournamentParticipant(tournament, participantId) {
+  if (!participantId || !Array.isArray(tournament?.players)) return null;
+  return tournament.players.find((player) => player.id === participantId) || null;
+}
+
+function getTournamentMatchById(tournament, matchId) {
+  if (!matchId) return null;
+  const lookup = tournament?.matchLookup?.[matchId];
+  if (!lookup) return null;
+  return (
+    tournament.rounds?.[lookup.roundIndex]?.matches?.[lookup.matchIndex] || null
+  );
+}
+
+function getTournamentPlayerName(tournament, participantId) {
+  if (!participantId) return "Unbekannt";
+  const participant = getTournamentParticipant(tournament, participantId);
+  return participant ? participant.name : "Unbekannt";
+}
+
+function propagateTournamentWinner(tournament, match, winnerId) {
+  if (!winnerId || !tournament) return;
+  if (!match.nextMatchId) {
+    tournament.championId = winnerId;
+    tournament.status = "complete";
+    return;
+  }
+
+  const lookup = tournament.matchLookup?.[match.nextMatchId];
+  if (!lookup) return;
+  const targetRound = tournament.rounds[lookup.roundIndex];
+  if (!targetRound) return;
+  const targetMatch = targetRound.matches[lookup.matchIndex];
+  if (!targetMatch) return;
+
+  const participant = getTournamentParticipant(tournament, winnerId);
+  const payload = participant
+    ? { participantId: participant.id, name: participant.name, seed: participant.seed }
+    : { participantId: winnerId, name: "Unbekannt", seed: null };
+
+  if (!Array.isArray(targetMatch.players)) {
+    targetMatch.players = [null, null];
+  }
+  const slotIndex = Number(match.nextMatchSlot) === 1 ? 1 : 0;
+  const existingSlot = targetMatch.players[slotIndex];
+  const sourceMatchId = existingSlot?.sourceMatchId || match.id;
+  targetMatch.players[slotIndex] = {
+    ...payload,
+    sourceMatchId,
+  };
+  if (targetMatch.status === "empty") {
+    targetMatch.status = "pending";
+  }
+}
+
+function matchHasBothPlayers(match) {
+  return (
+    Array.isArray(match?.players) &&
+    match.players.length >= 2 &&
+    match.players.every((slot) => slot && slot.participantId)
+  );
+}
+
+function findNextTournamentMatch(tournament) {
+  if (!tournament?.rounds?.length) return null;
+  for (let roundIndex = 0; roundIndex < tournament.rounds.length; roundIndex += 1) {
+    const round = tournament.rounds[roundIndex];
+    if (!round?.matches?.length) continue;
+    for (let matchIndex = 0; matchIndex < round.matches.length; matchIndex += 1) {
+      const match = round.matches[matchIndex];
+      if (!match) continue;
+      if (match.status === "pending" && matchHasBothPlayers(match)) {
+        return { roundIndex, matchIndex };
+      }
+    }
+  }
+  return null;
+}
+
+function formatTournamentMatchLabel(tournament, roundIndex, matchIndex) {
+  const round = tournament?.rounds?.[roundIndex];
+  const matchNumber = matchIndex + 1;
+  if (!round) {
+    return `Spiel ${matchNumber}`;
+  }
+  return `${round.label} - Spiel ${matchNumber}`;
+}
+
+function describeTournamentMatchStatus(tournament, match) {
+  if (!match) return "Unbekannt";
+  if (match.status === "in-progress") {
+    return "Laeuft";
+  }
+  if (match.status === "completed") {
+    const name = match.winnerId ? getTournamentPlayerName(tournament, match.winnerId) : "Unbekannt";
+    return `Sieger: ${name}`;
+  }
+  if (match.status === "auto-advanced") {
+    const name = match.winnerId ? getTournamentPlayerName(tournament, match.winnerId) : "Freilos";
+    return `Freilos fuer ${name}`;
+  }
+  if (match.status === "pending") {
+    return matchHasBothPlayers(match) ? "Bereit" : "Wartet auf Teilnehmer";
+  }
+  return "Keine Teilnehmer";
+}
+
+function renderTournamentBracket() {
+  if (!elements.tournamentBracket) return;
+  const tournament = gameState.tournament;
+  const hasVisibleMatches =
+    tournament?.rounds?.some((round) =>
+      round.matches?.some((match) => match && match.status !== "empty")
+    ) || false;
+
+  if (!hasVisibleMatches) {
+    elements.tournamentBracket.innerHTML =
+      '<p class="tournament-empty">Noch kein Turnier erstellt.</p>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round?.matches?.length) return;
+    const visible = round.matches.some((match) => match && match.status !== "empty");
+    if (!visible) return;
+
+    const roundSection = document.createElement("section");
+    roundSection.className = "tournament-round";
+    roundSection.dataset.roundId = round.id;
+
+    const title = document.createElement("h4");
+    title.className = "tournament-round-title";
+    title.textContent = round.label;
+    roundSection.appendChild(title);
+
+    const list = document.createElement("ul");
+    list.className = "tournament-match-list";
+
+    round.matches.forEach((match, matchIndex) => {
+      if (!match || match.status === "empty") return;
+      const item = document.createElement("li");
+      let className = "tournament-match";
+      if (match.status === "in-progress") className += " in-progress";
+      if (match.status === "completed") className += " completed";
+      if (match.status === "auto-advanced") className += " auto-advanced";
+      item.className = className;
+      item.dataset.matchId = match.id;
+
+      const matchLabel = document.createElement("div");
+      matchLabel.className = "tournament-match-label";
+      matchLabel.textContent = formatTournamentMatchLabel(tournament, roundIndex, matchIndex);
+      item.appendChild(matchLabel);
+
+      const slotList = Array.isArray(match.players) ? match.players : [null, null];
+      slotList.forEach((slot) => {
+        const slotEl = document.createElement("div");
+        let slotClass = "tournament-player-slot";
+        if (!slot || !slot.participantId) {
+          slotClass += " empty";
+          slotEl.className = slotClass;
+          slotEl.textContent = "Freilos";
+        } else {
+          if (match.winnerId && slot.participantId === match.winnerId) {
+            slotClass += " winner";
+          }
+          slotEl.className = slotClass;
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = slot.name || "Teilnehmer";
+          slotEl.appendChild(nameSpan);
+          if (slot.seed) {
+            const seedSpan = document.createElement("span");
+            seedSpan.className = "seed";
+            seedSpan.textContent = `#${slot.seed}`;
+            slotEl.appendChild(seedSpan);
+          }
+        }
+        item.appendChild(slotEl);
+      });
+
+      const statusEl = document.createElement("div");
+      statusEl.className = "tournament-match-status";
+      statusEl.textContent = describeTournamentMatchStatus(tournament, match);
+      item.appendChild(statusEl);
+
+      list.appendChild(item);
+    });
+
+    roundSection.appendChild(list);
+    fragment.appendChild(roundSection);
+  });
+
+  elements.tournamentBracket.innerHTML = "";
+  elements.tournamentBracket.appendChild(fragment);
+}
+
+function launchTournamentMatch(target) {
+  const tournament = gameState.tournament;
+  if (!tournament?.active) return;
+  const round = tournament.rounds?.[target.roundIndex];
+  const match = round?.matches?.[target.matchIndex];
+  if (!match || !matchHasBothPlayers(match)) {
+    setTournamentStatus("Keine weitere Begegnung verfuergbar.", "idle");
+    return;
+  }
+
+  clearTournamentMatchTimer();
+
+  tournament.currentRoundIndex = target.roundIndex;
+  tournament.currentMatchIndex = target.matchIndex;
+  tournament.currentMatchId = match.id;
+  match.status = "in-progress";
+  tournament.status = "in-progress";
+
+  renderTournamentBracket();
+
+  const playerConfigs = match.players.map((slot, index) => {
+    const participant = slot?.participantId ? getTournamentParticipant(tournament, slot.participantId) : null;
+    const name = slot?.name || participant?.name || `Spieler ${index + 1}`;
+    return {
+      name,
+      profileId: "",
+      tournamentPlayerId: slot?.participantId || null,
+      tournamentSeed: participant?.seed || slot?.seed || null,
+    };
+  });
+
+  const matchupLabel = playerConfigs.map((config) => config.name).join(" vs ");
+  const roundLabel = round?.label || "Match";
+  setTournamentStatus(`${roundLabel}: ${matchupLabel}`, "in-progress");
+
+  const startScore = tournament.startingScore || DEFAULT_STARTING_SCORE;
+  const outMode = tournament.outMode || DEFAULT_OUT_MODE;
+  const matchMode = tournament.matchMode || DEFAULT_MATCH_MODE;
+
+  startGame(playerConfigs, startScore, outMode, matchMode);
+  setViewMode("play");
+}
+
+function handleTournamentMatchCompletion(winningPlayer) {
+  const tournament = gameState.tournament;
+  if (!tournament?.active || !tournament.currentMatchId) return;
+  clearTournamentMatchTimer();
+  const lookup = tournament.matchLookup?.[tournament.currentMatchId];
+  if (!lookup) {
+    tournament.currentMatchId = null;
+    return;
+  }
+
+  const round = tournament.rounds?.[lookup.roundIndex];
+  const match = round?.matches?.[lookup.matchIndex];
+  if (!match) {
+    tournament.currentMatchId = null;
+    return;
+  }
+
+  const winnerId = winningPlayer?.tournamentPlayerId || null;
+  if (winnerId) {
+    match.winnerId = winnerId;
+  }
+  match.status = "completed";
+  tournament.currentMatchId = null;
+  tournament.currentRoundIndex = null;
+  tournament.currentMatchIndex = null;
+
+  if (winnerId) {
+    propagateTournamentWinner(tournament, match, winnerId);
+  }
+
+  resolveTournamentByes(tournament);
+  renderTournamentBracket();
+
+  if (match.roundId === "final") {
+    tournament.status = "complete";
+    tournament.championId = winnerId;
+    const championName = winnerId ? getTournamentPlayerName(tournament, winnerId) : "Unbekannt";
+    setTournamentStatus(`Champion: ${championName}`, "complete");
+    setViewMode("tournament");
+    return;
+  }
+
+  const nextMatch = findNextTournamentMatch(tournament);
+  if (nextMatch) {
+    const nextRound = tournament.rounds[nextMatch.roundIndex];
+    const nextMatchRef = nextRound?.matches?.[nextMatch.matchIndex];
+    const playersLabel = nextMatchRef?.players
+      ?.map((slot) => (slot?.participantId ? slot.name : "Freilos"))
+      .join(" vs ") || "Freilos";
+    setTournamentStatus(`${nextRound?.label || "Match"}: ${playersLabel}`, "pending");
+
+    clearTournamentMatchTimer();
+    const target = { roundIndex: nextMatch.roundIndex, matchIndex: nextMatch.matchIndex };
+    tournament.nextMatchTimer = setTimeout(() => {
+      tournament.nextMatchTimer = null;
+      launchTournamentMatch(target);
+    }, 1200);
+    return;
+  }
+
+  if (tournament.championId) {
+    const championName = getTournamentPlayerName(tournament, tournament.championId);
+    tournament.status = "complete";
+    setTournamentStatus(`Champion: ${championName}`, "complete");
+    setViewMode("tournament");
+  } else {
+    setTournamentStatus("Turnier abgeschlossen.", "complete");
+  }
+}
+
+function getActiveTournamentMatchLabel() {
+  const tournament = gameState.tournament;
+  if (!tournament?.active || !tournament.currentMatchId) return "";
+  const lookup = tournament.matchLookup?.[tournament.currentMatchId];
+  if (!lookup) return "";
+  return formatTournamentMatchLabel(tournament, lookup.roundIndex, lookup.matchIndex);
 }
 
 const DARTBOARD_NUMBER_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
