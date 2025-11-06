@@ -90,6 +90,10 @@ const elements = {
   profileFirstName: document.getElementById("profile-first-name"),
   profileLastName: document.getElementById("profile-last-name"),
   profileNickname: document.getElementById("profile-nickname"),
+  profileExportBtn: document.getElementById("profile-export"),
+  profileImportBtn: document.getElementById("profile-import-btn"),
+  profileImportInput: document.getElementById("profile-import"),
+  profileDataStatus: document.getElementById("profile-data-status"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
   leaderboardBody: document.getElementById("leaderboard-body"),
@@ -462,6 +466,17 @@ async function initialize() {
   if (elements.profileList) {
     elements.profileList.addEventListener("click", onProfileListClick);
   }
+  if (elements.profileExportBtn) {
+    elements.profileExportBtn.addEventListener("click", exportProfilesToFile);
+  }
+  if (elements.profileImportBtn) {
+    elements.profileImportBtn.addEventListener("click", onProfileImportButtonClick);
+  }
+  if (elements.profileImportInput) {
+    elements.profileImportInput.addEventListener("change", onProfileImportInputChange);
+  }
+
+  updateProfileDataStatus("");
 
   await loadProfiles();
   handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
@@ -2039,6 +2054,207 @@ function saveProfiles() {
     console.error("Profile konnten nicht gespeichert werden", error);
   }
   scheduleProfileSync();
+}
+
+function updateProfileDataStatus(message, status = "info") {
+  const statusElement = elements.profileDataStatus;
+  if (!statusElement) return;
+
+  if (!message) {
+    statusElement.textContent = "";
+    statusElement.className = "profile-data-status";
+    statusElement.hidden = true;
+    return;
+  }
+
+  let className = "profile-data-status";
+  if (status === "success") {
+    className += " success";
+  } else if (status === "error") {
+    className += " error";
+  }
+
+  statusElement.className = className;
+  statusElement.textContent = message;
+  statusElement.hidden = false;
+}
+
+function exportProfilesToFile() {
+  if (!profiles.length) {
+    updateProfileDataStatus("Keine Profile zum Export vorhanden.", "error");
+    return;
+  }
+
+  try {
+    const timestamp = new Date().toISOString().replace(/[:T]/g, "-").split(".")[0];
+    const fileName = `profiles-${timestamp}.json`;
+    const blob = new Blob([JSON.stringify(profiles, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    updateProfileDataStatus(
+      `Profile exportiert (${profiles.length}) → ${fileName}`,
+      "success"
+    );
+  } catch (error) {
+    console.error("Export der Profile fehlgeschlagen:", error);
+    updateProfileDataStatus("Export fehlgeschlagen. Bitte erneut versuchen.", "error");
+  }
+}
+
+function onProfileImportButtonClick() {
+  elements.profileImportInput?.click();
+}
+
+function onProfileImportInputChange(event) {
+  const input = event.currentTarget;
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  updateProfileDataStatus("Import wird verarbeitet…");
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const text = reader.result;
+      if (typeof text !== "string") {
+        throw new Error("UNEXPECTED_CONTENT");
+      }
+      const parsed = JSON.parse(text);
+      const rawProfiles = parseImportedProfileData(parsed);
+      if (!rawProfiles.length) {
+        throw new Error("NO_PROFILES_FOUND");
+      }
+      const { added, updated } = mergeImportedProfiles(rawProfiles);
+      updateProfileDataStatus(
+        `Import abgeschlossen: ${added} neue, ${updated} aktualisierte Profile.`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Import der Profile fehlgeschlagen:", error);
+      updateProfileDataStatus(
+        "Import fehlgeschlagen. Bitte gültige profiles.json auswählen.",
+        "error"
+      );
+    } finally {
+      if (input) {
+        input.value = "";
+      }
+    }
+  };
+  reader.onerror = () => {
+    console.error("Datei konnte nicht gelesen werden:", reader.error);
+    updateProfileDataStatus(
+      "Import fehlgeschlagen. Datei konnte nicht gelesen werden.",
+      "error"
+    );
+    if (input) {
+      input.value = "";
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function parseImportedProfileData(raw) {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (raw && typeof raw === "object") {
+    if (Array.isArray(raw.profiles)) {
+      return raw.profiles;
+    }
+    if (Array.isArray(raw.data)) {
+      return raw.data;
+    }
+  }
+  return [];
+}
+
+function normalizeImportedProfileEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const copy = structuredClone(entry);
+  const normalized = {
+    id: typeof copy.id === "string" && copy.id.trim() ? copy.id.trim() : uid(),
+    firstName: (copy.firstName || "").toString().trim(),
+    lastName: (copy.lastName || "").toString().trim(),
+    nickname: (copy.nickname || copy.displayName || copy.name || "").toString().trim(),
+    image: typeof copy.image === "string" ? copy.image : "",
+    stats: {},
+    history: Array.isArray(copy.history) ? structuredClone(copy.history).slice(0, 10) : [],
+    createdAt: Number.isFinite(Number(copy.createdAt)) ? Number(copy.createdAt) : Date.now(),
+  };
+
+  const statsSource = copy.stats && typeof copy.stats === "object" ? copy.stats : {};
+  normalized.stats = {
+    gamesPlayed: Number(statsSource.gamesPlayed) || 0,
+    legsWon: Number(statsSource.legsWon) || 0,
+    setsWon: Number(statsSource.setsWon) || 0,
+    totalPoints: Number(statsSource.totalPoints) || 0,
+    totalDarts: Number(statsSource.totalDarts) || 0,
+    dartHistogram: cloneHistogram(statsSource.dartHistogram),
+  };
+
+  if (!normalized.nickname && !normalized.firstName && !normalized.lastName) {
+    normalized.nickname = "Unbenannt";
+  }
+
+  ensureProfileStats(normalized);
+  return normalized;
+}
+
+function mergeImportedProfiles(importedProfiles) {
+  if (!Array.isArray(importedProfiles) || !importedProfiles.length) {
+    return { added: 0, updated: 0 };
+  }
+
+  const existingMap = new Map();
+  profiles.forEach((profile) => {
+    const clone = structuredClone(profile);
+    if (!clone.id || typeof clone.id !== "string" || !clone.id.trim()) {
+      clone.id = uid();
+    } else {
+      clone.id = clone.id.trim();
+    }
+    ensureProfileStats(clone);
+    existingMap.set(clone.id, clone);
+  });
+
+  let added = 0;
+  let updated = 0;
+  const processedIds = new Set();
+
+  importedProfiles.forEach((entry) => {
+    const normalized = normalizeImportedProfileEntry(entry);
+    if (!normalized || processedIds.has(normalized.id)) {
+      return;
+    }
+    processedIds.add(normalized.id);
+    if (existingMap.has(normalized.id)) {
+      updated += 1;
+    } else {
+      added += 1;
+    }
+    existingMap.set(normalized.id, normalized);
+  });
+
+  profiles = Array.from(existingMap.values());
+  profiles.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+  saveProfiles();
+  renderProfileOptions();
+  renderProfileList();
+
+  return { added, updated };
 }
 
 function renderProfileOptions() {
