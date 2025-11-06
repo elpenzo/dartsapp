@@ -1192,7 +1192,6 @@ function render() {
 
 const MAX_DOUBLE_OUT_CHECKOUT = 170;
 const MAX_SINGLE_OUT_CHECKOUT = 180;
-const CHECKOUT_NO_FINISH_TEXT = "Kein Finish";
 const CHECKOUT_SHOTS = createCheckoutShotCatalog();
 const CHECKOUT_DOUBLE_SHOTS = CHECKOUT_SHOTS.filter((shot) => shot.isDouble);
 const CHECKOUT_CACHE = new Map();
@@ -1223,6 +1222,7 @@ function renderScoreboard() {
     const setsNode = fragment.querySelector(".player-sets");
     const legsNode = fragment.querySelector(".player-legs");
     const checkoutNode = fragment.querySelector(".player-checkout");
+    const checkoutWrapper = fragment.querySelector(".player-checkout-wrapper");
 
     const displayName = getPlayerDisplayName(player);
     nameNode.textContent = displayName;
@@ -1257,16 +1257,18 @@ function renderScoreboard() {
     if (legsNode) {
       legsNode.textContent = String(player.legsThisSet || 0);
     }
-    if (checkoutNode) {
+    if (checkoutNode && checkoutWrapper) {
       const suggestion = getCheckoutSuggestion(player.score, gameState.outMode);
       if (suggestion) {
         checkoutNode.textContent = suggestion;
         checkoutNode.dataset.state = "ready";
         checkoutNode.title = `Empfohlener Checkout: ${suggestion}`;
+        checkoutWrapper.hidden = false;
       } else {
-        checkoutNode.textContent = CHECKOUT_NO_FINISH_TEXT;
+        checkoutNode.textContent = "";
         checkoutNode.dataset.state = "none";
         checkoutNode.removeAttribute("title");
+        checkoutWrapper.hidden = true;
       }
     }
 
