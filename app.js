@@ -32,6 +32,8 @@ const DART_SWIPE_MIN_DISTANCE = 30;
 const DART_SWIPE_PREVIEW_THRESHOLD = 12;
 const DART_SWIPE_MAX_OFFSET = 18;
 const DART_SWIPE_FEEDBACK_TIMEOUT = 250;
+const VOICE_WAKE_WORD = "hey siri";
+const VOICE_WAKE_TIMEOUT_MS = 15000;
 
 const elements = {
   setupForm: document.getElementById("setup-form"),
@@ -81,6 +83,10 @@ const elements = {
 
 const dartSwipePointers = new Map();
 const dartSwipeBoundButtons = new WeakSet();
+const voiceControlState = {
+  awake: false,
+  wakeTimer: null,
+};
 
 const gameState = {
   players: [],
@@ -298,6 +304,7 @@ class SpeechEngine {
 
     this.recognition = new SpeechRecognition();
     this.recognition.lang = "de-DE";
+    this.recognition.continuous = true;
     this.recognition.interimResults = false;
     this.recognition.maxAlternatives = 1;
 
@@ -525,6 +532,7 @@ function resetGame() {
   elements.lastUtterance.textContent = "-";
   elements.lastInterpretation.textContent = "-";
   resetProfileForm(true);
+  disarmVoiceControl();
 }
 
 function createPlayerConfig(slot, formData, select, input) {
@@ -549,33 +557,78 @@ function createNewTurn() {
   };
 }
 
+function extractWakeWord(transcript) {
+  if (!transcript) {
+    return { wakeWordDetected: false, commandText: "" };
+  }
+  const normalized = transcript.toLowerCase();
+  const index = normalized.indexOf(VOICE_WAKE_WORD);
+  if (index === -1) {
+    return { wakeWordDetected: false, commandText: transcript.trim() };
+  }
+  const commandText = transcript.slice(index + VOICE_WAKE_WORD.length).trim();
+  return { wakeWordDetected: true, commandText };
+}
+
+function armVoiceControl() {
+  voiceControlState.awake = true;
+  if (voiceControlState.wakeTimer) {
+    clearTimeout(voiceControlState.wakeTimer);
+  }
+  voiceControlState.wakeTimer = setTimeout(() => {
+    voiceControlState.awake = false;
+    voiceControlState.wakeTimer = null;
+  }, VOICE_WAKE_TIMEOUT_MS);
+}
+
+function disarmVoiceControl() {
+  voiceControlState.awake = false;
+  if (voiceControlState.wakeTimer) {
+    clearTimeout(voiceControlState.wakeTimer);
+    voiceControlState.wakeTimer = null;
+  }
+}
+
 function handleUtterance(transcript) {
   if (!gameState.legActive) return;
 
-  elements.lastUtterance.textContent = transcript || "–";
-  const interpretation = interpretUtterance(transcript);
+  elements.lastUtterance.textContent = transcript || "-";
+  const { wakeWordDetected, commandText } = extractWakeWord(transcript || "");
+
+  if (wakeWordDetected) {
+    armVoiceControl();
+    notifyVoiceStatus("info", "Codewort erkannt");
+  }
+
+  if (!voiceControlState.awake) {
+    elements.lastInterpretation.textContent = `Codewort "${VOICE_WAKE_WORD}" erforderlich`;
+    return;
+  }
+
+  const cleanedCommand = commandText.replace(/^[\s,;:.-]+/, "");
+  const effectiveCommand = cleanedCommand.trim();
+  if (!effectiveCommand) {
+    elements.lastInterpretation.textContent = "Bereit fuer Sprachbefehle";
+    return;
+  }
+
+  const interpretation = interpretUtterance(effectiveCommand);
   elements.lastInterpretation.textContent = interpretation.readable;
 
-  switch (interpretation.type) {
-    case "dart":
-      applyDart(interpretation);
-      break;
-    case "turnScore":
-      applyTurnResult(interpretation);
-      break;
-    case "bust":
-      registerBust("Sprachbefehl");
-      break;
-    case "undo":
-      undoLastTurn();
-      break;
-    case "newGame":
-      resetGame();
-      break;
-    case "noop":
-    default:
-      notifyVoiceStatus("error", "Nicht erkannt");
+  let executed = false;
+  if (interpretation.type === "sequence") {
+    interpretation.actions.forEach((action) => {
+      executed = executeInterpretation(action) || executed;
+    });
+  } else {
+    executed = executeInterpretation(interpretation);
   }
+
+  if (!executed) {
+    notifyVoiceStatus("error", "Nichts ausgefuehrt");
+  }
+
+  disarmVoiceControl();
 }
 
 function handleSpeechState(state, error) {
@@ -598,6 +651,28 @@ function handleSpeechState(state, error) {
 function notifyVoiceStatus(status, label) {
   elements.voiceStatus.className = `status ${status}`;
   elements.voiceStatus.textContent = label;
+}
+
+function executeInterpretation(interpretation) {
+  switch (interpretation.type) {
+    case "dart":
+      applyDart(interpretation);
+      return true;
+    case "turnScore":
+      applyTurnResult(interpretation);
+      return true;
+    case "bust":
+      registerBust("Sprachbefehl");
+      return true;
+    case "undo":
+      undoLastTurn();
+      return true;
+    case "newGame":
+      resetGame();
+      return true;
+    default:
+      return false;
+  }
 }
 
 function onDartModeClick(event) {
@@ -635,23 +710,65 @@ function onDartPickerClick(event) {
 function interpretUtterance(raw) {
   if (!raw) return { type: "noop", readable: "Keine Eingabe" };
 
-  const input = raw.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  const segments = splitUtteranceSegments(raw);
+  if (segments.length > 1) {
+    const actions = segments
+      .map((segment) => interpretSegment(segment))
+      .filter((action) => action.type && action.type !== "noop");
+    if (actions.length === 1) {
+      return actions[0];
+    }
+    if (actions.length > 1) {
+      return {
+        type: "sequence",
+        actions,
+        readable: actions.map((action) => action.readable).join(", "),
+      };
+    }
+  }
+
+  return interpretSegment(raw);
+}
+
+function splitUtteranceSegments(raw) {
+  if (!raw) return [];
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+  if (/[;,]/.test(normalized)) {
+    return normalized.split(/[;,]/).map((segment) => segment.trim()).filter(Boolean);
+  }
+  return normalized
+    .split(/\s+(?:und|plus|dann)\s+/i)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function interpretSegment(rawSegment) {
+  const source = (rawSegment || "").trim();
+  if (!source) return { type: "noop", readable: "Keine Eingabe" };
+
+  const normalizedSource =
+    typeof source.normalize === "function"
+      ? source.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      : source;
+
+  const input = normalizedSource.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 
   const commands = {
-    bust: ["bust", "passt", "überworfen"],
-    undo: ["rückgängig", "zurück", "undo"],
+    bust: ["bust", "passt", "uberworfen", "berworfen"],
+    undo: ["ruckgangig", "zuruck", "undo"],
     newGame: ["neues spiel", "neues leg", "restart"],
   };
 
   if (containsCommand(input, commands.bust)) return { type: "bust", readable: "Bust" };
-  if (containsCommand(input, commands.undo)) return { type: "undo", readable: "Rückgängig" };
+  if (containsCommand(input, commands.undo)) return { type: "undo", readable: "Rueckgaengig" };
   if (containsCommand(input, commands.newGame)) return { type: "newGame", readable: "Neues Spiel" };
 
   const dart = parseDartPhrase(input);
   if (dart) {
     return {
       type: "dart",
-      readable: dart.readable || dart.label,
+      readable: dart.readable || source || dart.label,
       dart,
     };
   }
@@ -666,8 +783,9 @@ function interpretUtterance(raw) {
     };
   }
 
-  return { type: "noop", readable: `Keine Zuordnung für "${raw}"` };
+  return { type: "noop", readable: `Keine Zuordnung fuer "${source}"` };
 }
+
 
 function containsCommand(text, lexemes) {
   return lexemes.some((lexeme) => text.includes(lexeme));
