@@ -248,13 +248,13 @@
     </section>
 
     <section class="card scoreboard" aria-labelledby="scoreboard-title">
-      <h2 id="scoreboard-title">Scoreboard</h2>
+      <div class="scoreboard-header">
+        <h2 id="scoreboard-title">Scoreboard</h2>
+        <button id="undo-btn" type="button" class="scoreboard-undo">Rückgängig</button>
+      </div>
       <p id="game-settings" class="game-meta" aria-live="polite"></p>
       <p id="active-player-banner" class="active-player-banner" aria-live="assertive"></p>
       <div id="scoreboard" class="scoreboard-grid" aria-live="polite"></div>
-      <div id="scoreboard-heatmap" class="scoreboard-heatmap" aria-live="polite" hidden>
-        <p class="heatmap-empty">Heatmap wird angezeigt, sobald Wurfdaten vorliegen.</p>
-      </div>
       <section class="scoreboard-quick" aria-labelledby="quick-select-title">
         <h3 id="quick-select-title">Schnellauswahl</h3>
         <div class="dart-combos" aria-label="Standardfolgen">
@@ -348,6 +348,10 @@
       </section>
     </section>
 
+    <section id="scoreboard-heatmap" class="card scoreboard-heatmap" aria-live="polite" hidden>
+      <p class="heatmap-empty">Heatmap wird angezeigt, sobald Wurfdaten vorliegen.</p>
+    </section>
+
     <section class="card voice-console" aria-labelledby="voice-title">
       <div class="voice-header">
         <h2 id="voice-title">Sprachsteuerung</h2>
@@ -374,7 +378,6 @@
               <button id="manual-commit" type="button">Übernehmen</button>
               <button id="manual-bust" type="button" class="ghost">Bust</button>
             </div>
-            <button id="undo-btn" type="button" class="ghost manual-undo">Rückgängig</button>
           </div>
         </div>
       </div>

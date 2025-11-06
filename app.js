@@ -999,7 +999,7 @@ function applyDart(interpretation) {
   player.score = remaining;
   gameState.currentTurn.darts.push(normalizedDart);
   gameState.currentTurn.spoken.push(interpretation.readable);
-  player.lastTurn = normalizedDart.label;
+  player.lastTurn = formatTurnPreview(gameState.currentTurn);
   recordDartHit(player, normalizedDart);
 
   if (remaining === 0) {
@@ -1199,7 +1199,18 @@ function advancePlayer() {
 
 function summarizeTurn(turn) {
   if (!turn || !turn.darts.length) return "-";
-  return turn.darts.map((dart) => shortLabelForDart(dart)).join(", ");
+  return turn.darts.map((dart) => shortLabelForDart(dart)).join(" · ");
+}
+
+function formatTurnPreview(turn) {
+  if (!turn || !Array.isArray(turn.darts) || !turn.darts.length) {
+    return "-";
+  }
+  const labels = turn.darts.map((dart) => shortLabelForDart(dart));
+  while (labels.length < MAX_DARTS_PER_TURN) {
+    labels.push("–");
+  }
+  return labels.join(" · ");
 }
 
 function render() {
