@@ -106,6 +106,8 @@ const elements = {
   dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
   comboButtons: Array.from(document.querySelectorAll(".combo-button")),
   viewToggleButtons: Array.from(document.querySelectorAll(".view-toggle-btn")),
+  mainMenu: document.getElementById("main-menu"),
+  mainMenuTrigger: document.getElementById("main-menu-trigger"),
   layoutToggleButtons: Array.from(document.querySelectorAll(".layout-toggle-btn")),
   tournamentCard: document.querySelector(".tournament-card"),
   tournamentForm: document.getElementById("tournament-form"),
@@ -442,12 +444,17 @@ async function initialize() {
       button.addEventListener("click", () => setViewMode(button.dataset.view));
     });
   }
+  if (elements.mainMenuTrigger && elements.mainMenu) {
+    elements.mainMenuTrigger.addEventListener("click", () => toggleMainMenu());
+  }
   if (elements.layoutToggleButtons.length) {
     elements.layoutToggleButtons.forEach((button) => {
       button.addEventListener("click", () => setLayoutMode(button.dataset.layout || "auto"));
     });
   }
   restoreLayoutModePreference();
+  window.addEventListener("resize", closeMainMenu);
+  window.addEventListener("orientationchange", closeMainMenu);
   if (elements.tournamentForm) {
     elements.tournamentForm.addEventListener("submit", onTournamentSubmit);
   }
@@ -2243,6 +2250,7 @@ function setViewMode(view) {
   const normalized = allowedViews.includes(view) ? view : "setup";
   if (gameState.viewMode === normalized) {
     updateViewModeUI();
+    closeMainMenu();
     return;
   }
   gameState.viewMode = normalized;
@@ -2287,12 +2295,14 @@ function updateViewModeUI() {
   } else if (currentView === "leaderboard") {
     renderLeaderboard();
   }
+  closeMainMenu();
 }
 
 function setLayoutMode(mode) {
   const normalized = VALID_LAYOUT_MODES.includes(mode) ? mode : "auto";
   if (gameState.layoutMode === normalized) {
     updateLayoutToggleButtons();
+    closeMainMenu();
     return;
   }
   gameState.layoutMode = normalized;
@@ -2303,6 +2313,7 @@ function setLayoutMode(mode) {
   } catch (error) {
     console.warn("Layoutmodus konnte nicht gespeichert werden:", error);
   }
+  closeMainMenu();
 }
 
 function restoreLayoutModePreference() {
@@ -2338,6 +2349,54 @@ function updateLayoutToggleButtons() {
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
+}
+
+function toggleMainMenu(forceOpen) {
+  if (!elements.mainMenu || !elements.mainMenuTrigger) return;
+  const shouldOpen =
+    typeof forceOpen === "boolean"
+      ? forceOpen
+      : !document.body.classList.contains("main-menu-open");
+  if (shouldOpen) {
+    openMainMenu();
+  } else {
+    closeMainMenu();
+  }
+}
+
+function openMainMenu() {
+  if (!elements.mainMenu || !elements.mainMenuTrigger) return;
+  if (document.body.classList.contains("main-menu-open")) return;
+  document.body.classList.add("main-menu-open");
+  elements.mainMenuTrigger.setAttribute("aria-expanded", "true");
+  elements.mainMenu.setAttribute("aria-hidden", "false");
+  document.addEventListener("click", handleMainMenuOutsideClick, true);
+  document.addEventListener("keydown", handleMainMenuKeydown);
+}
+
+function closeMainMenu() {
+  if (!elements.mainMenu || !elements.mainMenuTrigger) return;
+  if (!document.body.classList.contains("main-menu-open")) return;
+  document.body.classList.remove("main-menu-open");
+  elements.mainMenuTrigger.setAttribute("aria-expanded", "false");
+  elements.mainMenu.setAttribute("aria-hidden", "true");
+  document.removeEventListener("click", handleMainMenuOutsideClick, true);
+  document.removeEventListener("keydown", handleMainMenuKeydown);
+}
+
+function handleMainMenuOutsideClick(event) {
+  if (!elements.mainMenu || !elements.mainMenuTrigger) return;
+  const isInsideMenu = elements.mainMenu.contains(event.target);
+  const isTrigger = elements.mainMenuTrigger.contains(event.target);
+  if (!isInsideMenu && !isTrigger) {
+    closeMainMenu();
+  }
+}
+
+function handleMainMenuKeydown(event) {
+  if (event.key === "Escape") {
+    closeMainMenu();
+  }
 }
 
 function updateActivePlayerBanner() {

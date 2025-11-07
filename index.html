@@ -12,17 +12,40 @@
   <header class="app-header">
     <h1>friendDartBoard</h1>
     <p class="tagline">Sprich deine Würfe - die App protokolliert das Leg.</p>
-    <div class="view-toggle" role="group" aria-label="Ansicht wählen">
-      <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
-      <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
-      <button type="button" class="view-toggle-btn" data-view="tournament">Turnier</button>
-      <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
-      <button type="button" class="view-toggle-btn" data-view="leaderboard">Leaderboard</button>
-    </div>
-    <div class="layout-toggle" role="group" aria-label="Layout wählen">
-      <button type="button" class="layout-toggle-btn active" data-layout="auto">Auto</button>
-      <button type="button" class="layout-toggle-btn" data-layout="desktop">Web</button>
-      <button type="button" class="layout-toggle-btn" data-layout="mobile">Mobil</button>
+    <div class="main-menu-bar">
+      <button
+        type="button"
+        class="main-menu-trigger"
+        id="main-menu-trigger"
+        aria-haspopup="true"
+        aria-expanded="false"
+        aria-controls="main-menu"
+      >
+        <span class="burger-line"></span>
+        <span class="burger-line"></span>
+        <span class="burger-line"></span>
+        <span class="sr-only">Hauptmenü öffnen</span>
+      </button>
+      <div id="main-menu" class="main-menu" aria-hidden="true">
+        <div class="main-menu-section">
+          <p class="main-menu-label">Ansicht</p>
+          <div class="view-toggle" role="group" aria-label="Ansicht wählen">
+            <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
+            <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+            <button type="button" class="view-toggle-btn" data-view="tournament">Turnier</button>
+            <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
+            <button type="button" class="view-toggle-btn" data-view="leaderboard">Leaderboard</button>
+          </div>
+        </div>
+        <div class="main-menu-section">
+          <p class="main-menu-label">Layout</p>
+          <div class="layout-toggle" role="group" aria-label="Layout wählen">
+            <button type="button" class="layout-toggle-btn active" data-layout="auto">Auto</button>
+            <button type="button" class="layout-toggle-btn" data-layout="desktop">Web</button>
+            <button type="button" class="layout-toggle-btn" data-layout="mobile">Mobil</button>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
