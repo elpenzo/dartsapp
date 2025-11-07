@@ -94,8 +94,12 @@ const elements = {
   matchModeSelect: document.getElementById("match-mode"),
   playerOneProfileSelect: document.getElementById("player-one-profile"),
   playerTwoProfileSelect: document.getElementById("player-two-profile"),
+  playerThreeProfileSelect: document.getElementById("player-three-profile"),
+  playerFourProfileSelect: document.getElementById("player-four-profile"),
   playerOneInput: document.getElementById("player-one"),
   playerTwoInput: document.getElementById("player-two"),
+  playerThreeInput: document.getElementById("player-three"),
+  playerFourInput: document.getElementById("player-four"),
   gameSettings: document.getElementById("game-settings"),
   activePlayerBanner: document.getElementById("active-player-banner"),
   scoreboardCard: document.querySelector(".scoreboard"),
@@ -137,6 +141,53 @@ const elements = {
   leaderboardBody: document.getElementById("leaderboard-body"),
   leaderboardEmpty: document.getElementById("leaderboard-empty"),
 };
+
+const PLAYER_SLOTS = [
+  {
+    slot: 1,
+    fieldName: "playerOne",
+    fallback: "Player 1",
+    optional: false,
+    selectKey: "playerOneProfileSelect",
+    inputKey: "playerOneInput",
+  },
+  {
+    slot: 2,
+    fieldName: "playerTwo",
+    fallback: "Player 2",
+    optional: false,
+    selectKey: "playerTwoProfileSelect",
+    inputKey: "playerTwoInput",
+  },
+  {
+    slot: 3,
+    fieldName: "playerThree",
+    fallback: "Player 3",
+    optional: true,
+    selectKey: "playerThreeProfileSelect",
+    inputKey: "playerThreeInput",
+  },
+  {
+    slot: 4,
+    fieldName: "playerFour",
+    fallback: "Player 4",
+    optional: true,
+    selectKey: "playerFourProfileSelect",
+    inputKey: "playerFourInput",
+  },
+];
+
+function forEachPlayerSlot(callback) {
+  PLAYER_SLOTS.forEach((config) => {
+    const select = elements[config.selectKey];
+    const input = elements[config.inputKey];
+    callback(config, select, input);
+  });
+}
+
+function getPlayerSlotConfig(slot) {
+  return PLAYER_SLOTS.find((config) => config.slot === slot) || null;
+}
 
 const dartSwipePointers = new Map();
 const dartSwipeBoundButtons = new WeakSet();
@@ -506,16 +557,13 @@ async function initialize() {
       button.addEventListener("click", () => setLeaderboardSort(button.dataset.sort || "average"));
     });
   }
-  if (elements.playerOneProfileSelect && elements.playerOneInput) {
-    elements.playerOneProfileSelect.addEventListener("change", () =>
-      handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1")
-    );
-  }
-  if (elements.playerTwoProfileSelect && elements.playerTwoInput) {
-    elements.playerTwoProfileSelect.addEventListener("change", () =>
-      handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2")
-    );
-  }
+  forEachPlayerSlot(({ fallback, optional }, select, input) => {
+    if (select && input) {
+      select.addEventListener("change", () =>
+        handleProfileSelection(select, input, optional ? "" : fallback)
+      );
+    }
+  });
   if (elements.profileForm) {
     elements.profileForm.addEventListener("submit", onProfileFormSubmit);
   }
@@ -539,8 +587,9 @@ async function initialize() {
   }
 
   await loadProfiles();
-  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+  forEachPlayerSlot(({ fallback, optional }, select, input) => {
+    handleProfileSelection(select, input, optional ? "" : fallback);
+  });
   renderLeaderboard();
 
   updateViewModeUI();
@@ -566,10 +615,15 @@ function onSetupSubmit(event) {
   const matchModeRaw = formData.get("matchMode");
   const matchMode = MATCH_MODES[matchModeRaw] ? matchModeRaw : DEFAULT_MATCH_MODE;
 
-  const playerConfigs = [
-    createPlayerConfig(1, formData, elements.playerOneProfileSelect, elements.playerOneInput),
-    createPlayerConfig(2, formData, elements.playerTwoProfileSelect, elements.playerTwoInput),
-  ];
+  const playerConfigs = PLAYER_SLOTS.map((config) =>
+    createPlayerConfig(
+      config.slot,
+      formData,
+      elements[config.selectKey],
+      elements[config.inputKey],
+      { fieldName: config.fieldName, fallbackName: config.fallback, optional: config.optional }
+    )
+  ).filter(Boolean);
 
   startGame(playerConfigs, startingScore, outMode, matchMode);
   setViewMode("play");
@@ -581,19 +635,24 @@ function startGame(
   outMode = DEFAULT_OUT_MODE,
   matchMode = DEFAULT_MATCH_MODE
 ) {
-  const configs = Array.isArray(playerConfigs)
-    ? playerConfigs.map((entry, index) => {
-      if (typeof entry === "string") {
-        return { name: entry.trim(), profileId: "" };
-      }
-      const normalizedName = (entry.name || entry.displayName || `Player ${index + 1}`).trim();
-      return {
-        ...entry,
-        name: normalizedName,
-        profileId: entry.profileId || "",
-      };
-    })
+  const sanitizedConfigs = Array.isArray(playerConfigs)
+    ? playerConfigs.filter((entry) => Boolean(entry))
     : [];
+  if (sanitizedConfigs.length < 2) {
+    window.alert("Bitte mindestens zwei Spieler festlegen, um ein Spiel zu starten.");
+    return;
+  }
+  const configs = sanitizedConfigs.map((entry, index) => {
+    if (typeof entry === "string") {
+      return { name: entry.trim(), profileId: "" };
+    }
+    const normalizedName = (entry.name || entry.displayName || `Player ${index + 1}`).trim();
+    return {
+      ...entry,
+      name: normalizedName,
+      profileId: entry.profileId || "",
+    };
+  });
 
   if (!configs.length) {
     configs.push({ name: "Player 1", profileId: "" }, { name: "Player 2", profileId: "" });
@@ -650,27 +709,30 @@ function startGame(
 
 function resetGame() {
   elements.setupForm.reset();
-  if (elements.playerOneProfileSelect) {
-    elements.playerOneProfileSelect.value = "";
-  }
-  if (elements.playerTwoProfileSelect) {
-    elements.playerTwoProfileSelect.value = "";
-  }
+  forEachPlayerSlot(({ fallback, optional }, select, input) => {
+    if (select) {
+      select.value = "";
+    }
+    if (input) {
+      input.readOnly = false;
+      input.classList.remove("read-only");
+      if (optional) {
+        input.value = "";
+      } else {
+        input.value = fallback;
+      }
+    }
+    handleProfileSelection(select, input, optional ? "" : fallback);
+  });
   if (elements.matchModeSelect) {
     elements.matchModeSelect.value = DEFAULT_MATCH_MODE;
   }
-  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
-  const defaultConfigs = [
-    {
-      name: elements.playerOneInput ? elements.playerOneInput.value.trim() || "Player 1" : "Player 1",
-      profileId: "",
-    },
-    {
-      name: elements.playerTwoInput ? elements.playerTwoInput.value.trim() || "Player 2" : "Player 2",
-      profileId: "",
-    },
-  ];
+  const defaultConfigs = PLAYER_SLOTS.filter((config) => !config.optional).map((config) => ({
+    name: elements[config.inputKey]
+      ? elements[config.inputKey].value.trim() || config.fallback
+      : config.fallback,
+    profileId: "",
+  }));
   startGame(defaultConfigs, DEFAULT_STARTING_SCORE, DEFAULT_OUT_MODE, DEFAULT_MATCH_MODE);
   elements.manualScoreInput.value = "";
   elements.lastUtterance.textContent = "-";
@@ -679,14 +741,19 @@ function resetGame() {
   disarmVoiceControl();
 }
 
-function createPlayerConfig(slot, formData, select, input) {
-  const fieldName = slot === 1 ? "playerOne" : "playerTwo";
-  const fallback = `Player ${slot}`;
+function createPlayerConfig(slot, formData, select, input, options = {}) {
+  const { fieldName = `player${slot}`, fallbackName = `Player ${slot}`, optional = false } = options;
   const formValue = formData.get(fieldName);
   const inputValue = input ? input.value : "";
-  const name = (formValue || inputValue || "").toString().trim() || fallback;
   const profileId = select?.value || "";
-  return { slot, name, profileId };
+  const nameFromForm = (formValue || inputValue || "").toString().trim();
+  const hasProfile = Boolean(profileId);
+  const hasName = Boolean(nameFromForm);
+  if (optional && !hasProfile && !hasName) {
+    return null;
+  }
+  const finalName = hasName ? nameFromForm : fallbackName;
+  return { slot, name: finalName, profileId };
 }
 
 function createNewTurn() {
@@ -2631,8 +2698,9 @@ function onProfileFormSubmit(event) {
     renderProfileOptions();
     renderProfileList();
     const playersUpdated = refreshPlayersForProfile(profile.id);
-    handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-    handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+    forEachPlayerSlot(({ fallback, optional }, select, input) => {
+      handleProfileSelection(select, input, optional ? "" : fallback);
+    });
     resetProfileForm();
     if (playersUpdated) {
       render();
@@ -2664,8 +2732,9 @@ function onProfileFormSubmit(event) {
   renderProfileOptions();
   renderProfileList();
   resetProfileForm();
-  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+  forEachPlayerSlot(({ fallback, optional }, select, input) => {
+    handleProfileSelection(select, input, optional ? "" : fallback);
+  });
   notifyVoiceStatus("success", "Profil gespeichert");
 }
 
@@ -2757,8 +2826,9 @@ function onProfileImportFileChange(event) {
       renderProfileOptions();
       renderProfileList();
       renderLeaderboard();
-      handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-      handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+      forEachPlayerSlot(({ fallback, optional }, select, input) => {
+        handleProfileSelection(select, input, optional ? "" : fallback);
+      });
       let playersUpdated = false;
       mergeResult.updatedIds.forEach((profileId) => {
         if (refreshPlayersForProfile(profileId)) {
@@ -3061,21 +3131,21 @@ function onProfileListClick(event) {
     saveProfiles();
     renderProfileOptions();
     renderProfileList();
-    if (elements.playerOneProfileSelect?.value === profileId) {
-      elements.playerOneProfileSelect.value = "";
-      handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-    }
-    if (elements.playerTwoProfileSelect?.value === profileId) {
-      elements.playerTwoProfileSelect.value = "";
-      handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
-    }
+    forEachPlayerSlot(({ fallback, optional }, select, input) => {
+      if (select?.value === profileId) {
+        select.value = "";
+        handleProfileSelection(select, input, optional ? "" : fallback);
+      }
+    });
   }
 }
 
 function assignProfileToSlot(profileId, slot) {
-  const select = slot === 1 ? elements.playerOneProfileSelect : elements.playerTwoProfileSelect;
-  const input = slot === 1 ? elements.playerOneInput : elements.playerTwoInput;
-  const fallback = slot === 1 ? "Player 1" : "Player 2";
+  const config = getPlayerSlotConfig(slot);
+  if (!config) return;
+  const select = elements[config.selectKey];
+  const input = elements[config.inputKey];
+  const fallback = config.optional ? "" : config.fallback;
   if (!select || !input) return;
   select.value = profileId || "";
   handleProfileSelection(select, input, fallback);
@@ -3147,8 +3217,9 @@ function renderProfileOptions() {
     }
   };
 
-  updateSelect(elements.playerOneProfileSelect);
-  updateSelect(elements.playerTwoProfileSelect);
+  forEachPlayerSlot((_, select) => {
+    updateSelect(select);
+  });
 
   if (Array.isArray(elements.tournamentPlayerSelects)) {
     elements.tournamentPlayerSelects.forEach((select, index) => {
@@ -3157,8 +3228,9 @@ function renderProfileOptions() {
     });
   }
 
-  handleProfileSelection(elements.playerOneProfileSelect, elements.playerOneInput, "Player 1");
-  handleProfileSelection(elements.playerTwoProfileSelect, elements.playerTwoInput, "Player 2");
+  forEachPlayerSlot(({ fallback, optional }, select, input) => {
+    handleProfileSelection(select, input, optional ? "" : fallback);
+  });
 }
 
 function renderProfileList() {
@@ -3223,6 +3295,8 @@ function renderProfileList() {
             <button type="button" class="ghost" data-action="reset-stats" data-id="${profile.id}">Statistiken zurücksetzen</button>
             <button type="button" class="ghost" data-action="assign" data-slot="1" data-id="${profile.id}">Als Spieler 1 wählen</button>
             <button type="button" class="ghost" data-action="assign" data-slot="2" data-id="${profile.id}">Als Spieler 2 wählen</button>
+            <button type="button" class="ghost" data-action="assign" data-slot="3" data-id="${profile.id}">Als Spieler 3 wählen</button>
+            <button type="button" class="ghost" data-action="assign" data-slot="4" data-id="${profile.id}">Als Spieler 4 wählen</button>
             <button type="button" class="ghost danger" data-action="delete" data-id="${profile.id}">Löschen</button>
           </div>
         </div>
