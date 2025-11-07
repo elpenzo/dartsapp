@@ -106,6 +106,7 @@ const elements = {
   dartNumberButtons: Array.from(document.querySelectorAll(".dart-number")),
   comboButtons: Array.from(document.querySelectorAll(".combo-button")),
   viewToggleButtons: Array.from(document.querySelectorAll(".view-toggle-btn")),
+  layoutToggleButtons: Array.from(document.querySelectorAll(".layout-toggle-btn")),
   tournamentCard: document.querySelector(".tournament-card"),
   tournamentForm: document.getElementById("tournament-form"),
   tournamentResetBtn: document.getElementById("tournament-reset"),
@@ -173,6 +174,7 @@ const gameState = {
   dartMultiplier: 1,
   dartNumberOrder: "sequential",
   viewMode: "setup",
+  layoutMode: "auto",
   statsCommitted: false,
   leaderboardSort: "average",
   matchMode: DEFAULT_MATCH_MODE,
@@ -189,6 +191,8 @@ let profiles = [];
 let pendingProfileImage = null;
 let editingProfileId = null;
 const PROFILES_API_URL = "/api/profiles";
+const LAYOUT_MODE_STORAGE_KEY = "friendDartLayoutMode";
+const VALID_LAYOUT_MODES = ["auto", "desktop", "mobile"];
 let pendingServerSync = null;
 let serverSyncDisabled = false;
 
@@ -438,6 +442,12 @@ async function initialize() {
       button.addEventListener("click", () => setViewMode(button.dataset.view));
     });
   }
+  if (elements.layoutToggleButtons.length) {
+    elements.layoutToggleButtons.forEach((button) => {
+      button.addEventListener("click", () => setLayoutMode(button.dataset.layout || "auto"));
+    });
+  }
+  restoreLayoutModePreference();
   if (elements.tournamentForm) {
     elements.tournamentForm.addEventListener("submit", onTournamentSubmit);
   }
@@ -2277,6 +2287,57 @@ function updateViewModeUI() {
   } else if (currentView === "leaderboard") {
     renderLeaderboard();
   }
+}
+
+function setLayoutMode(mode) {
+  const normalized = VALID_LAYOUT_MODES.includes(mode) ? mode : "auto";
+  if (gameState.layoutMode === normalized) {
+    updateLayoutToggleButtons();
+    return;
+  }
+  gameState.layoutMode = normalized;
+  applyLayoutMode();
+  updateLayoutToggleButtons();
+  try {
+    localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, normalized);
+  } catch (error) {
+    console.warn("Layoutmodus konnte nicht gespeichert werden:", error);
+  }
+}
+
+function restoreLayoutModePreference() {
+  let initial = "auto";
+  try {
+    const stored = localStorage.getItem(LAYOUT_MODE_STORAGE_KEY);
+    if (VALID_LAYOUT_MODES.includes(stored)) {
+      initial = stored;
+    }
+  } catch (error) {
+    console.warn("Layoutmodus konnte nicht geladen werden:", error);
+  }
+  gameState.layoutMode = initial;
+  applyLayoutMode();
+  updateLayoutToggleButtons();
+}
+
+function applyLayoutMode() {
+  if (!document.body) return;
+  document.body.classList.remove("layout-desktop", "layout-mobile");
+  if (gameState.layoutMode === "desktop") {
+    document.body.classList.add("layout-desktop");
+  } else if (gameState.layoutMode === "mobile") {
+    document.body.classList.add("layout-mobile");
+  }
+}
+
+function updateLayoutToggleButtons() {
+  if (!elements.layoutToggleButtons?.length) return;
+  elements.layoutToggleButtons.forEach((button) => {
+    const target = button.dataset.layout || "auto";
+    const isActive = target === gameState.layoutMode;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
 }
 
 function updateActivePlayerBanner() {
