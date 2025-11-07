@@ -679,6 +679,13 @@ function startGame(
       lastTurn: null,
       totalPointsThisGame: 0,
       totalDartsThisGame: 0,
+      dartsThrownThisGame: 0,
+      first12PointsThisGame: 0,
+      first12DartsThisGame: 0,
+      tripleHitsThisGame: 0,
+      doubleHitsThisGame: 0,
+      checkoutAttemptsThisGame: 0,
+      checkoutHitsThisGame: 0,
       statsHistory: [],
       legsThisSet: 0,
       totalLegsWon: 0,
@@ -1127,7 +1134,8 @@ function applyDart(interpretation) {
   }
 
   const dart = interpretation.dart;
-  const remaining = player.score - dart.score;
+  const scoreBefore = player.score;
+  const remaining = scoreBefore - dart.score;
   const requiresDouble = requiresDoubleCheckout();
   const normalizedDart = normalizeDart(dart);
   if (!normalizedDart) return;
@@ -1149,6 +1157,8 @@ function applyDart(interpretation) {
   gameState.currentTurn.spoken.push(interpretation.readable);
   player.lastTurn = formatTurnPreview(gameState.currentTurn);
   recordDartHit(player, normalizedDart);
+  recordDartAccuracyStats(player, normalizedDart);
+  recordCheckoutStats(player, scoreBefore, remaining === 0);
 
   if (remaining === 0) {
     finishTurn(false, true);
@@ -1165,7 +1175,8 @@ function applyTurnResult(result) {
   const player = gameState.players[gameState.activeIndex];
   if (!player) return;
 
-  const remaining = player.score - result.score;
+  const scoreBefore = player.score;
+  const remaining = scoreBefore - result.score;
   const requiresDouble = requiresDoubleCheckout();
 
   if (remaining < 0) {
@@ -1179,7 +1190,9 @@ function applyTurnResult(result) {
   }
 
   recordSnapshot();
-  recordDartStats(player, result.score, Number(result.dartsCount) || 3);
+  const manualDarts = Number(result.dartsCount) || 3;
+  recordDartStats(player, result.score, manualDarts);
+  recordCheckoutStats(player, scoreBefore, remaining === 0, manualDarts);
 
   const turn =
     gameState.currentTurn && gameState.currentTurn.playerId === player.id
@@ -1279,6 +1292,13 @@ function recordSnapshot() {
       setsWon: player.setsWon || 0,
       totalPointsThisGame: player.totalPointsThisGame || 0,
       totalDartsThisGame: player.totalDartsThisGame || 0,
+      dartsThrownThisGame: player.dartsThrownThisGame || 0,
+      first12PointsThisGame: player.first12PointsThisGame || 0,
+      first12DartsThisGame: player.first12DartsThisGame || 0,
+      tripleHitsThisGame: player.tripleHitsThisGame || 0,
+      doubleHitsThisGame: player.doubleHitsThisGame || 0,
+      checkoutAttemptsThisGame: player.checkoutAttemptsThisGame || 0,
+      checkoutHitsThisGame: player.checkoutHitsThisGame || 0,
       dartHitsThisGame: cloneHistogram(player.dartHitsThisGame),
     })),
     history: structuredClone(gameState.history),
@@ -1327,6 +1347,13 @@ function undoLastTurn() {
       player.setsWon = snapshotPlayer.setsWon || 0;
       player.totalPointsThisGame = snapshotPlayer.totalPointsThisGame || 0;
       player.totalDartsThisGame = snapshotPlayer.totalDartsThisGame || 0;
+      player.dartsThrownThisGame = snapshotPlayer.dartsThrownThisGame || 0;
+      player.first12PointsThisGame = snapshotPlayer.first12PointsThisGame || 0;
+      player.first12DartsThisGame = snapshotPlayer.first12DartsThisGame || 0;
+      player.tripleHitsThisGame = snapshotPlayer.tripleHitsThisGame || 0;
+      player.doubleHitsThisGame = snapshotPlayer.doubleHitsThisGame || 0;
+      player.checkoutAttemptsThisGame = snapshotPlayer.checkoutAttemptsThisGame || 0;
+      player.checkoutHitsThisGame = snapshotPlayer.checkoutHitsThisGame || 0;
       player.dartHitsThisGame = cloneHistogram(snapshotPlayer.dartHitsThisGame);
     }
   });
@@ -1369,6 +1396,8 @@ function render() {
 
 const MAX_DOUBLE_OUT_CHECKOUT = 170;
 const MAX_SINGLE_OUT_CHECKOUT = 180;
+const FIRST12_TRACKING_DARTS = 12;
+const CHECKOUT_TRACKING_THRESHOLD = 170;
 const CHECKOUT_SHOTS = createCheckoutShotCatalog();
 const CHECKOUT_DOUBLE_SHOTS = CHECKOUT_SHOTS.filter((shot) => shot.isDouble);
 const CHECKOUT_CACHE = new Map();
@@ -2203,6 +2232,36 @@ function triggerSwipeFeedback(button, multiplier) {
   }, DART_SWIPE_FEEDBACK_TIMEOUT);
 }
 
+function accumulateFirst12Stats(player, points, dartsCount) {
+  if (!player) return;
+  const currentDarts = player.first12DartsThisGame || 0;
+  const capacity = Math.max(0, FIRST12_TRACKING_DARTS - currentDarts);
+  if (capacity <= 0 || dartsCount <= 0) return;
+  const dartsApplied = Math.min(capacity, dartsCount);
+  const pointsPerDart = dartsCount > 0 ? points / dartsCount : 0;
+  player.first12PointsThisGame = (player.first12PointsThisGame || 0) + pointsPerDart * dartsApplied;
+  player.first12DartsThisGame = currentDarts + dartsApplied;
+}
+
+function recordDartAccuracyStats(player, dart) {
+  if (!player || !dart) return;
+  const multiplier = Number(dart.multiplier) || 1;
+  if (multiplier === 3) {
+    player.tripleHitsThisGame = (player.tripleHitsThisGame || 0) + 1;
+  } else if (multiplier === 2) {
+    player.doubleHitsThisGame = (player.doubleHitsThisGame || 0) + 1;
+  }
+}
+
+function recordCheckoutStats(player, scoreBefore, didCheckout, dartsUsed = 1) {
+  if (!player || scoreBefore == null) return;
+  if (scoreBefore > CHECKOUT_TRACKING_THRESHOLD) return;
+  player.checkoutAttemptsThisGame = (player.checkoutAttemptsThisGame || 0) + (dartsUsed || 1);
+  if (didCheckout) {
+    player.checkoutHitsThisGame = (player.checkoutHitsThisGame || 0) + 1;
+  }
+}
+
 function updateUndoAvailability() {
   if (!elements.undoBtn) return;
   elements.undoBtn.disabled = gameState.snapshots.length === 0;
@@ -2214,6 +2273,8 @@ function recordDartStats(player, points, dartsCount) {
   const normalizedDarts = Number(dartsCount) || 0;
   player.totalPointsThisGame = (player.totalPointsThisGame || 0) + normalizedPoints;
   player.totalDartsThisGame = (player.totalDartsThisGame || 0) + normalizedDarts;
+  player.dartsThrownThisGame = (player.dartsThrownThisGame || 0) + normalizedDarts;
+  accumulateFirst12Stats(player, normalizedPoints, normalizedDarts);
 }
 
 function applyCombo(sequence) {
@@ -2260,6 +2321,14 @@ function finalizeGameStats() {
     profile.stats.gamesPlayed += 1;
     profile.stats.totalPoints += player.totalPointsThisGame || 0;
     profile.stats.totalDarts += player.totalDartsThisGame || 0;
+    profile.stats.first12Points = (profile.stats.first12Points || 0) + (player.first12PointsThisGame || 0);
+    profile.stats.first12Darts = (profile.stats.first12Darts || 0) + (player.first12DartsThisGame || 0);
+    profile.stats.tripleHits = (profile.stats.tripleHits || 0) + (player.tripleHitsThisGame || 0);
+    profile.stats.doubleHits = (profile.stats.doubleHits || 0) + (player.doubleHitsThisGame || 0);
+    profile.stats.checkoutAttempts =
+      (profile.stats.checkoutAttempts || 0) + (player.checkoutAttemptsThisGame || 0);
+    profile.stats.checkoutHits =
+      (profile.stats.checkoutHits || 0) + (player.checkoutHitsThisGame || 0);
     profile.stats.legsWon += player.totalLegsWon || 0;
     const setsWonThisMatch = player.setsWon || (player.id === gameState.winnerId ? 1 : 0);
     profile.stats.setsWon += setsWonThisMatch;
@@ -2282,6 +2351,14 @@ function finalizeGameStats() {
       legWon: player.id === gameState.winnerId,
       setsWon: setsWonThisMatch,
       legsWon: player.totalLegsWon || 0,
+      first12Average:
+        player.first12DartsThisGame > 0
+          ? Number((player.first12PointsThisGame / player.first12DartsThisGame).toFixed(2))
+          : 0,
+      checkoutAttempts: player.checkoutAttemptsThisGame || 0,
+      checkoutHits: player.checkoutHitsThisGame || 0,
+      tripleHits: player.tripleHitsThisGame || 0,
+      doubleHits: player.doubleHitsThisGame || 0,
       dartHistogram: entryHistogram,
     };
 
@@ -2899,6 +2976,12 @@ function normalizeImportedProfiles(source) {
         setsWon: Number(entry.stats.setsWon) || 0,
         totalPoints: Number(entry.stats.totalPoints) || 0,
         totalDarts: Number(entry.stats.totalDarts) || 0,
+        first12Points: Number(entry.stats.first12Points) || 0,
+        first12Darts: Number(entry.stats.first12Darts) || 0,
+        tripleHits: Number(entry.stats.tripleHits) || 0,
+        doubleHits: Number(entry.stats.doubleHits) || 0,
+        checkoutAttempts: Number(entry.stats.checkoutAttempts) || 0,
+        checkoutHits: Number(entry.stats.checkoutHits) || 0,
         dartHistogram:
           entry.stats.dartHistogram && typeof entry.stats.dartHistogram === "object"
             ? entry.stats.dartHistogram
@@ -3092,6 +3175,12 @@ function resetProfileStats(profileId) {
   profile.stats.setsWon = 0;
   profile.stats.totalPoints = 0;
   profile.stats.totalDarts = 0;
+  profile.stats.first12Points = 0;
+  profile.stats.first12Darts = 0;
+  profile.stats.tripleHits = 0;
+  profile.stats.doubleHits = 0;
+  profile.stats.checkoutAttempts = 0;
+  profile.stats.checkoutHits = 0;
   profile.stats.dartHistogram = createEmptyHistogram();
   profile.history = [];
   profile.updatedAt = Date.now();
@@ -3255,6 +3344,10 @@ function renderProfileList() {
       const fullName = `${profile.firstName} ${profile.lastName}`.trim();
       const averagePerDart = formatAverage(profile.stats.totalPoints, profile.stats.totalDarts);
       const averageThreeDart = formatAverage(profile.stats.totalPoints * 3, profile.stats.totalDarts);
+      const first12Average = formatAverage(profile.stats.first12Points, profile.stats.first12Darts);
+      const checkoutRate = formatPercentage(profile.stats.checkoutHits, profile.stats.checkoutAttempts);
+      const tripleRate = formatPercentage(profile.stats.tripleHits || 0, profile.stats.totalDarts || 0);
+      const doubleRate = formatPercentage(profile.stats.doubleHits || 0, profile.stats.totalDarts || 0);
       const games = profile.stats.gamesPlayed;
       const legs = profile.stats.legsWon;
       const sets = profile.stats.setsWon || 0;
@@ -3288,6 +3381,7 @@ function renderProfileList() {
           <span>${fullName || ""}</span>
           <p class="profile-stats">Spiele: ${games} · Sätze: ${sets} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
         }</p>
+          <p class="profile-stats secondary">Ø12: ${first12Average} · Checkout: ${checkoutRate} · Triple%: ${tripleRate} · Double%: ${doubleRate}</p>
           ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
           ${heatmapMarkup}
           <div class="profile-actions-inline">
@@ -3359,6 +3453,16 @@ function renderLeaderboard() {
       const legs = Number(stats.legsWon) || 0;
       const sets = Number(stats.setsWon) || 0;
       const averageValue = darts > 0 ? points / darts : 0;
+      const first12AverageValue =
+        Number(stats.first12Darts) > 0 ? Number(stats.first12Points) / Number(stats.first12Darts) : 0;
+      const first12AverageLabel = formatAverage(stats.first12Points, stats.first12Darts);
+      const checkoutRateValue =
+        Number(stats.checkoutAttempts) > 0 ? Number(stats.checkoutHits || 0) / Number(stats.checkoutAttempts) : 0;
+      const checkoutRateLabel = formatPercentage(stats.checkoutHits || 0, stats.checkoutAttempts || 0);
+      const tripleRateValue = darts > 0 ? (Number(stats.tripleHits) || 0) / darts : 0;
+      const doubleRateValue = darts > 0 ? (Number(stats.doubleHits) || 0) / darts : 0;
+      const tripleRateLabel = formatPercentage(stats.tripleHits || 0, darts || 0);
+      const doubleRateLabel = formatPercentage(stats.doubleHits || 0, darts || 0);
       return {
         profile,
         displayName: getProfileDisplayName(profile),
@@ -3367,6 +3471,14 @@ function renderLeaderboard() {
         threeDartAverageValue: averageValue * 3,
         averageLabel: formatAverage(points, darts),
         threeDartLabel: darts > 0 ? (averageValue * 3).toFixed(2) : "0.00",
+        first12AverageValue,
+        first12AverageLabel,
+        checkoutRateValue,
+        checkoutRateLabel,
+        tripleRateValue,
+        tripleRateLabel,
+        doubleRateValue,
+        doubleRateLabel,
         legs,
         sets,
         games,
@@ -3453,6 +3565,22 @@ function renderLeaderboard() {
     const threeDartCell = document.createElement("td");
     threeDartCell.textContent = entry.threeDartLabel;
     tr.appendChild(threeDartCell);
+
+    const first12Cell = document.createElement("td");
+    first12Cell.textContent = entry.first12AverageLabel;
+    tr.appendChild(first12Cell);
+
+    const checkoutCell = document.createElement("td");
+    checkoutCell.textContent = entry.checkoutRateLabel;
+    tr.appendChild(checkoutCell);
+
+    const tripleCell = document.createElement("td");
+    tripleCell.textContent = entry.tripleRateLabel;
+    tr.appendChild(tripleCell);
+
+    const doubleCell = document.createElement("td");
+    doubleCell.textContent = entry.doubleRateLabel;
+    tr.appendChild(doubleCell);
 
     const setsCell = document.createElement("td");
     setsCell.textContent = String(entry.sets);
@@ -4266,6 +4394,12 @@ function ensureProfileStats(profile) {
   profile.stats.setsWon = profile.stats.setsWon || 0;
   profile.stats.totalPoints = profile.stats.totalPoints || 0;
   profile.stats.totalDarts = profile.stats.totalDarts || 0;
+   profile.stats.first12Points = profile.stats.first12Points || 0;
+   profile.stats.first12Darts = profile.stats.first12Darts || 0;
+   profile.stats.tripleHits = profile.stats.tripleHits || 0;
+   profile.stats.doubleHits = profile.stats.doubleHits || 0;
+   profile.stats.checkoutAttempts = profile.stats.checkoutAttempts || 0;
+   profile.stats.checkoutHits = profile.stats.checkoutHits || 0;
   profile.stats.dartHistogram = cloneHistogram(profile.stats.dartHistogram);
   profile.history = profile.history || [];
 }
@@ -4273,6 +4407,12 @@ function ensureProfileStats(profile) {
 function formatAverage(points, darts) {
   if (!darts) return "0.00";
   return Number(points / darts).toFixed(2);
+}
+
+function formatPercentage(value, total, decimals = 1) {
+  if (!total) return (0).toFixed(decimals) + "%";
+  const percentage = (Number(value) / Number(total)) * 100;
+  return `${percentage.toFixed(decimals)}%`;
 }
 
 function formatProfileDate(value) {
