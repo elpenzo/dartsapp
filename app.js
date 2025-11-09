@@ -1,4 +1,4 @@
-const DEFAULT_STARTING_SCORE = 501;
+﻿const DEFAULT_STARTING_SCORE = 501;
 const DEFAULT_OUT_MODE = "single";
 const MAX_DARTS_PER_TURN = 3;
 const MULTIPLIER_CONFIG = {
@@ -108,6 +108,7 @@ const elements = {
   scoreboardInsights: document.getElementById("scoreboard-insights"),
   hotNumberGrid: document.getElementById("hot-number-grid"),
   hotNumberMeta: document.getElementById("hot-number-meta"),
+  hotBoardModeButtons: Array.from(document.querySelectorAll(".hot-board-mode-btn")),
   undoBtn: document.getElementById("undo-btn"),
   dartModeSwitch: document.querySelector(".dart-mode-switch"),
   dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
@@ -231,6 +232,7 @@ const gameState = {
   snapshots: [],
   dartMultiplier: 1,
   dartNumberOrder: "sequential",
+  hotBoardMode: "live",
   viewMode: "setup",
   layoutMode: "auto",
   statsCommitted: false,
@@ -510,6 +512,12 @@ async function initialize() {
     elements.layoutToggleButtons.forEach((button) => {
       button.addEventListener("click", () => setLayoutMode(button.dataset.layout || "auto"));
     });
+  }
+  if (elements.hotBoardModeButtons?.length) {
+    elements.hotBoardModeButtons.forEach((button) => {
+      button.addEventListener("click", () => setHotBoardMode(button.dataset.mode || "live"));
+    });
+    updateHotBoardModeButtons();
   }
   if (elements.hotNumberGrid) {
     elements.hotNumberGrid.addEventListener("click", onHotNumberGridClick);
@@ -1705,46 +1713,55 @@ function renderHotNumberBoard() {
 
   if (gameState.viewMode !== "play") {
     grid.innerHTML = emptyMarkup;
-    if (meta) {
-      meta.textContent = "Hotboard erscheint während eines aktiven Spiels.";
-    }
+    if (meta) meta.textContent = "Hotboard erscheint während eines aktiven Spiels.";
     return;
   }
 
   const activePlayer = gameState.players[gameState.activeIndex];
   if (!activePlayer) {
     grid.innerHTML = emptyMarkup;
-    if (meta) {
-      meta.textContent = "Kein Spieler aktiv.";
-    }
+    if (meta) meta.textContent = "Kein Spieler aktiv.";
     return;
   }
 
-  const summary = summarizePlayerNumberInsights(activePlayer);
-  const boardData = computeHotNumberBoardData(summary);
+  const mode = gameState.hotBoardMode;
+  const summary = summarizePlayerNumberInsights(activePlayer, { source: mode });
+  const requestedHistory = mode === "history";
+  const showingHistory = summary.source === "history";
+  const currentMultiplier = gameState.dartMultiplier;
+  const multiplierLabel =
+    currentMultiplier === 2 ? "Double" : currentMultiplier === 3 ? "Triple" : "Single";
   const displayName = getPlayerDisplayName(activePlayer) || `Spieler ${gameState.activeIndex + 1}`;
+  const boardData = computeHotNumberBoardData(summary, currentMultiplier);
+  const modeHits = boardData.modeHits;
+  const shareBase =
+    modeHits ||
+    getMultiplierTotal(summary, currentMultiplier) ||
+    summary.totalHits ||
+    0;
 
   if (meta) {
-    meta.textContent = boardData.hasData
-      ? `Sortiert nach den Hot Numbers von ${displayName}`
-      : `Standardreihenfolge für ${displayName} (noch keine Daten)`;
+    if (requestedHistory && !showingHistory) {
+      meta.textContent = summary.totalHits
+        ? `Keine historischen Daten – zeige Live ${multiplierLabel}-Treffer von ${displayName}`
+        : `Keine historischen Daten für ${displayName}.`;
+    } else if (modeHits > 0) {
+      meta.textContent = `${showingHistory ? "Historische" : "Live"} ${multiplierLabel}-Treffer (${modeHits}×) von ${displayName}`;
+    } else if (summary.totalHits > 0) {
+      meta.textContent = `Noch keine ${multiplierLabel}-Treffer – nutze ${showingHistory ? "historische" : "Live"} Reihenfolge für ${displayName}`;
+    } else {
+      meta.textContent = `Noch keine Würfe für ${displayName}.`;
+    }
   }
 
   grid.innerHTML = "";
-  const orderedNumbers = boardData.order.length
-    ? boardData.order
-    : HOT_NUMBER_BASE_ORDER.slice();
-  const multiplierConfig = MULTIPLIER_CONFIG[gameState.dartMultiplier] || MULTIPLIER_CONFIG[1];
+  const orderedNumbers = boardData.order.length ? boardData.order : HOT_NUMBER_BASE_ORDER.slice();
+  const multiplierConfig = MULTIPLIER_CONFIG[currentMultiplier] || MULTIPLIER_CONFIG[1];
 
   orderedNumbers.forEach((value) => {
     const stats = boardData.counts.get(value);
     grid.appendChild(
-      createHotNumberButton(
-        value,
-        multiplierConfig,
-        stats?.total || 0,
-        summary.totalHits || 0
-      )
+      createHotNumberButton(value, multiplierConfig, stats, shareBase, currentMultiplier)
     );
   });
   grid.appendChild(createHotSpecialButton("SB", 25, false, "Single Bull"));
@@ -1752,30 +1769,50 @@ function renderHotNumberBoard() {
   grid.appendChild(createHotSpecialButton("0", 0, false, "Nullwurf"));
 }
 
-function computeHotNumberBoardData(summary) {
+function computeHotNumberBoardData(summary, multiplier) {
   const stats = summary.numberStats instanceof Map ? summary.numberStats : new Map();
   const order = HOT_NUMBER_BASE_ORDER.slice();
+  let modeHits = 0;
+
   order.sort((a, b) => {
-    const hitsA = stats.get(a)?.total || 0;
-    const hitsB = stats.get(b)?.total || 0;
-    if (hitsB !== hitsA) {
-      return hitsB - hitsA;
-    }
+    const hitsA = scoreHotHits(stats.get(a), multiplier);
+    const hitsB = scoreHotHits(stats.get(b), multiplier);
+    if (hitsB !== hitsA) return hitsB - hitsA;
     return HOT_NUMBER_BASE_ORDER.indexOf(a) - HOT_NUMBER_BASE_ORDER.indexOf(b);
   });
+
+  order.forEach((value) => {
+    modeHits += scoreHotHits(stats.get(value), multiplier);
+  });
+
   return {
     order,
     counts: stats,
     hasData: summary.totalHits > 0,
+    modeHits,
   };
 }
 
-function createHotNumberButton(baseValue, multiplierConfig, hitCount, totalHits) {
+function scoreHotHits(entry, multiplier) {
+  if (!entry) return 0;
+  if (multiplier === 2) return entry?.double || 0;
+  if (multiplier === 3) return entry?.triple || 0;
+  return entry?.single || entry?.total || 0;
+}
+
+function getMultiplierTotal(summary, multiplier) {
+  const totals = summary?.multiplierTotals;
+  if (!totals) return 0;
+  if (multiplier === 2) return totals.double || 0;
+  if (multiplier === 3) return totals.triple || 0;
+  return totals.single || 0;
+}
+
+function createHotNumberButton(baseValue, multiplierConfig, entry, totalHits, multiplier) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "dart-button hot-number-button";
 
-  const multiplier = gameState.dartMultiplier;
   const score = baseValue * multiplier;
   const label = multiplier === 1 ? `${baseValue}` : `${multiplierConfig.short}${baseValue}`;
   const readable =
@@ -1799,10 +1836,10 @@ function createHotNumberButton(baseValue, multiplierConfig, hitCount, totalHits)
 
   const meta = document.createElement("span");
   meta.className = "hot-number-meta";
-  meta.textContent =
-    hitCount > 0
-      ? `${hitCount}×${totalHits > 0 ? ` (${Math.round((hitCount / totalHits) * 100)}%)` : ""}`
-      : "–";
+  const hotHits = scoreHotHits(entry, multiplier);
+  const share = hotHits > 0 && totalHits > 0 ? ` (${Math.round((hotHits / totalHits) * 100)}%)` : "";
+  const prefix = multiplier === 2 ? "D" : multiplier === 3 ? "T" : "S";
+  meta.textContent = hotHits > 0 ? `${hotHits}×${share}` : `${prefix}${baseValue}`;
 
   button.append(abbr, valueSpan, meta);
   return button;
@@ -1834,35 +1871,72 @@ function createHotSpecialButton(label, score, isDouble, readable) {
   return button;
 }
 
-function summarizePlayerNumberInsights(player) {
-  const histogram = player?.dartHitsThisGame || null;
+function summarizePlayerNumberInsights(player, options = {}) {
+  const requestedSource = options.source === "history" ? "history" : "live";
+  const profile = player?.profileId ? getProfileById(player.profileId) : null;
+  const liveHistogram = player?.dartHitsThisGame || null;
+  const historyHistogram = profile?.stats?.dartHistogram || null;
+
+  const liveHasData = hasHistogramData(liveHistogram);
+  const historyHasData = hasHistogramData(historyHistogram);
+
+  let histogram = null;
+  let sourceUsed = requestedSource;
+
+  if (requestedSource === "history") {
+    if (historyHasData) {
+      histogram = historyHistogram;
+    } else if (liveHasData) {
+      histogram = liveHistogram;
+      sourceUsed = "live";
+    }
+  } else {
+    if (liveHasData) {
+      histogram = liveHistogram;
+    } else if (historyHasData) {
+      histogram = historyHistogram;
+      sourceUsed = "history";
+    }
+  }
+
+  const summary = buildHistogramSummary(histogram);
+  summary.source = histogram ? sourceUsed : requestedSource;
+  summary.profileId = profile?.id || "";
+  return summary;
+}
+
+function buildHistogramSummary(histogram) {
   const buckets = new Map();
   let totalHits = 0;
   let singleBull = 0;
   let doubleBull = 0;
+  let singleTotal = 0;
+  let doubleTotal = 0;
+  let tripleTotal = 0;
 
-  if (histogram) {
-    Object.entries(histogram).forEach(([key, rawValue]) => {
-      const hits = Number(rawValue) || 0;
-      if (!hits) return;
-      if (key === "MISS") {
-        return;
-      }
-      if (key === "SB") {
-        singleBull += hits;
-        totalHits += hits;
-        return;
-      }
-      if (key === "DB") {
-        doubleBull += hits;
-        totalHits += hits;
-        return;
-      }
-      const prefix = key.charAt(0);
-      const base = parseInt(key.slice(1), 10);
-      if (!Number.isFinite(base) || base <= 0) return;
+  const applyEntry = (key, rawValue) => {
+    const hits = Number(rawValue) || 0;
+    if (!hits) return;
+    if (key === "MISS") return;
+    if (key === "SB") {
+      singleBull += hits;
       totalHits += hits;
-      const bucket = buckets.get(base) || {
+      singleTotal += hits;
+      return;
+    }
+    if (key === "DB") {
+      doubleBull += hits;
+      totalHits += hits;
+      doubleTotal += hits;
+      return;
+    }
+    const prefix = key.charAt(0);
+    const base = parseInt(key.slice(1), 10);
+    if (!Number.isFinite(base) || base <= 0) return;
+    totalHits += hits;
+    const bucket =
+      buckets.get(base) ||
+      {
         label: `${base}`,
         number: base,
         single: 0,
@@ -1870,12 +1944,24 @@ function summarizePlayerNumberInsights(player) {
         triple: 0,
         total: 0,
       };
-      bucket.total += hits;
-      if (prefix === "S") bucket.single += hits;
-      else if (prefix === "D") bucket.double += hits;
-      else if (prefix === "T") bucket.triple += hits;
-      buckets.set(base, bucket);
-    });
+    bucket.total += hits;
+    if (prefix === "S") {
+      bucket.single += hits;
+      singleTotal += hits;
+    } else if (prefix === "D") {
+      bucket.double += hits;
+      doubleTotal += hits;
+    } else if (prefix === "T") {
+      bucket.triple += hits;
+      tripleTotal += hits;
+    }
+    buckets.set(base, bucket);
+  };
+
+  if (histogram instanceof Map) {
+    histogram.forEach((value, key) => applyEntry(key, value));
+  } else if (histogram && typeof histogram === "object") {
+    Object.entries(histogram).forEach(([key, rawValue]) => applyEntry(key, rawValue));
   }
 
   const topNumbers = Array.from(buckets.values())
@@ -1895,8 +1981,24 @@ function summarizePlayerNumberInsights(player) {
       db: doubleBull,
       total: singleBull + doubleBull,
     },
+    multiplierTotals: {
+      single: singleTotal,
+      double: doubleTotal,
+      triple: tripleTotal,
+    },
     numberStats: buckets,
   };
+}
+
+function hasHistogramData(histogram) {
+  if (!histogram) return false;
+  if (histogram instanceof Map) {
+    for (const value of histogram.values()) {
+      if (Number(value) > 0) return true;
+    }
+    return false;
+  }
+  return Object.values(histogram).some((value) => Number(value) > 0);
 }
 
 function createInsightChipNode(entry, totalHits) {
@@ -2159,6 +2261,23 @@ function setDartNumberOrder(order) {
   gameState.dartNumberOrder = normalized;
   updateDartNumberOrderButtons();
   updateDartPickerView();
+}
+
+function setHotBoardMode(mode) {
+  const normalized = mode === "history" ? "history" : "live";
+  if (gameState.hotBoardMode === normalized) return;
+  gameState.hotBoardMode = normalized;
+  updateHotBoardModeButtons();
+  renderHotNumberBoard();
+}
+
+function updateHotBoardModeButtons() {
+  elements.hotBoardModeButtons?.forEach((button) => {
+    const target = button.dataset.mode === "history" ? "history" : "live";
+    const isActive = target === gameState.hotBoardMode;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
 }
 
 function renderDartNumberButtons() {
