@@ -113,6 +113,7 @@ const elements = {
   mainMenu: document.getElementById("main-menu"),
   mainMenuTrigger: document.getElementById("main-menu-trigger"),
   layoutToggleButtons: Array.from(document.querySelectorAll(".layout-toggle-btn")),
+  rematchBtn: document.getElementById("rematch-btn"),
   tournamentCard: document.querySelector(".tournament-card"),
   tournamentForm: document.getElementById("tournament-form"),
   tournamentResetBtn: document.getElementById("tournament-reset"),
@@ -238,6 +239,8 @@ const gameState = {
   lastLegWinnerId: null,
   matchCompleted: false,
   tournament: createInitialTournamentState(),
+  lastGameConfig: null,
+  lastRematchConfig: null,
 };
 
 let profiles = [];
@@ -407,6 +410,7 @@ function handleLegWin(player) {
     gameState.matchCompleted = true;
     notifyVoiceStatus("success", `${displayName} gewinnt das Match`);
     finalizeGameStats();
+    prepareRematchConfig();
     handleTournamentMatchCompletion(player);
     return;
   }
@@ -506,6 +510,10 @@ async function initialize() {
   restoreLayoutModePreference();
   window.addEventListener("resize", closeMainMenu);
   window.addEventListener("orientationchange", closeMainMenu);
+  if (elements.rematchBtn) {
+    elements.rematchBtn.addEventListener("click", restartMatchWithSameSettings);
+  }
+  setRematchVisibility(false);
   if (elements.tournamentForm) {
     elements.tournamentForm.addEventListener("submit", onTournamentSubmit);
   }
@@ -657,6 +665,18 @@ function startGame(
   if (!configs.length) {
     configs.push({ name: "Player 1", profileId: "" }, { name: "Player 2", profileId: "" });
   }
+
+  gameState.lastGameConfig = {
+    startingScore,
+    outMode,
+    matchMode,
+    playerConfigs: configs.map((config) => ({
+      name: config.name,
+      profileId: config.profileId || "",
+    })),
+  };
+  gameState.lastRematchConfig = null;
+  setRematchVisibility(false);
 
   gameState.players = configs.map((config, index) => {
     const profile = getProfileById(config.profileId);
@@ -2495,6 +2515,12 @@ function updateLayoutToggleButtons() {
   });
 }
 
+function setRematchVisibility(isVisible) {
+  if (!elements.rematchBtn) return;
+  elements.rematchBtn.hidden = !isVisible;
+  elements.rematchBtn.disabled = !isVisible;
+}
+
 function toggleMainMenu(forceOpen) {
   if (!elements.mainMenu || !elements.mainMenuTrigger) return;
   const shouldOpen =
@@ -2541,6 +2567,74 @@ function handleMainMenuKeydown(event) {
   if (event.key === "Escape") {
     closeMainMenu();
   }
+}
+
+function restartMatchWithSameSettings() {
+  const config = gameState.lastRematchConfig;
+  if (!config || !Array.isArray(config.playerConfigs) || config.playerConfigs.length < 2) {
+    return;
+  }
+  startGame(config.playerConfigs, config.startingScore, config.outMode, config.matchMode);
+  setViewMode("play");
+}
+
+function prepareRematchConfig() {
+  const playerConfigs = buildRematchPlayerConfigs();
+  if (!playerConfigs.length) {
+    gameState.lastRematchConfig = null;
+    setRematchVisibility(false);
+    return;
+  }
+  gameState.lastRematchConfig = {
+    startingScore: gameState.startingScore,
+    outMode: gameState.outMode,
+    matchMode: gameState.matchMode,
+    playerConfigs,
+  };
+  setRematchVisibility(true);
+}
+
+function buildRematchPlayerConfigs() {
+  if (!gameState.players.length) return [];
+  const winnerId = gameState.winnerId;
+  const playersCopy = gameState.players.map((player) => ({
+    ref: player,
+    finalScore: Number(player.score) || 0,
+    totalPoints: Number(player.totalPointsThisGame) || 0,
+    totalDarts: Number(player.totalDartsThisGame) || 0,
+    id: player.id,
+  }));
+  const winnerEntry = playersCopy.find((entry) => entry.id === winnerId) || null;
+  const losers = playersCopy.filter((entry) => entry.id !== winnerId);
+  losers.sort((a, b) => {
+    if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+    const avgA = getPlayerAverageValue(a);
+    const avgB = getPlayerAverageValue(b);
+    return avgA - avgB;
+  });
+  const ordered = [...losers];
+  if (winnerEntry) {
+    ordered.push(winnerEntry);
+  } else if (ordered.length > 1) {
+    const fallback = ordered.pop();
+    ordered.push(fallback);
+  }
+  return ordered
+    .map((entry, index) => {
+      const player = entry.ref;
+      return {
+        name: getPlayerDisplayName(player) || player.name || `Player ${index + 1}`,
+        profileId: player.profileId || "",
+      };
+    })
+    .filter((config) => config.name);
+}
+
+function getPlayerAverageValue(entry) {
+  if (!entry) return Number.POSITIVE_INFINITY;
+  const darts = entry.totalDarts || 0;
+  if (!darts) return Number.POSITIVE_INFINITY;
+  return entry.totalPoints / darts;
 }
 
 function updateActivePlayerBanner() {

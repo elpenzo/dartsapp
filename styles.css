@@ -1131,6 +1131,33 @@ button.ghost {
   margin: 0;
 }
 
+.scoreboard-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.scoreboard-rematch {
+  background: transparent;
+  border: 1px solid var(--surface-border);
+  color: var(--text);
+  border-radius: 999px;
+  font-weight: 600;
+  padding: 0.5rem 1.2rem;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.scoreboard-rematch:hover:not(:disabled) {
+  background: rgba(36, 85, 245, 0.08);
+  border-color: rgba(36, 85, 245, 0.35);
+  color: var(--primary);
+}
+
+.scoreboard-rematch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .scoreboard-undo {
   background: var(--primary);
   color: #fff;
