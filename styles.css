@@ -2125,9 +2125,9 @@ body:not(.sets-mode) .player-legs-wrapper {
 }
 
 .dart-button .value {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text);
 }
 
 .history-log {
