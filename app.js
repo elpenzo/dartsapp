@@ -35,6 +35,7 @@ const DART_NUMBER_ORDERS = {
   adjacent: DART_NUMBER_ADJACENT_ORDER,
 };
 const DARTBOARD_NUMBERS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+const HOT_NUMBER_BASE_ORDER = DARTBOARD_NUMBERS.slice();
 const OUT_MODE_LABELS = {
   double: "Double Out",
   single: "Single Out",
@@ -104,6 +105,9 @@ const elements = {
   activePlayerBanner: document.getElementById("active-player-banner"),
   scoreboardCard: document.querySelector(".scoreboard"),
   scoreboardHeatmap: document.getElementById("scoreboard-heatmap"),
+  scoreboardInsights: document.getElementById("scoreboard-insights"),
+  hotNumberGrid: document.getElementById("hot-number-grid"),
+  hotNumberMeta: document.getElementById("hot-number-meta"),
   undoBtn: document.getElementById("undo-btn"),
   dartModeSwitch: document.querySelector(".dart-mode-switch"),
   dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
@@ -506,6 +510,9 @@ async function initialize() {
     elements.layoutToggleButtons.forEach((button) => {
       button.addEventListener("click", () => setLayoutMode(button.dataset.layout || "auto"));
     });
+  }
+  if (elements.hotNumberGrid) {
+    elements.hotNumberGrid.addEventListener("click", onHotNumberGridClick);
   }
   restoreLayoutModePreference();
   window.addEventListener("resize", closeMainMenu);
@@ -928,6 +935,28 @@ function onDartModeClick(event) {
 function onDartPickerClick(event) {
   const button = event.target.closest(".dart-button");
   if (!button || !elements.dartPicker.contains(button) || !gameState.legActive) return;
+
+  const label = button.dataset.label || "";
+  const readable = button.dataset.readable || label || button.textContent || "";
+  const score = parseInt(button.dataset.score || "0", 10);
+  const multiplier = parseInt(button.dataset.multiplier || "1", 10);
+  const isDouble = button.dataset.double === "true";
+
+  applyDart({
+    type: "dart",
+    readable,
+    dart: {
+      label: label || `${score}`,
+      score,
+      isDouble,
+      multiplier,
+    },
+  });
+}
+
+function onHotNumberGridClick(event) {
+  const button = event.target.closest(".hot-number-button");
+  if (!button || !gameState.legActive) return;
 
   const label = button.dataset.label || "";
   const readable = button.dataset.readable || label || button.textContent || "";
@@ -1523,6 +1552,8 @@ function renderScoreboard() {
 
   updateActivePlayerBanner();
   renderActivePlayerHeatmap();
+  renderScoreboardInsights();
+  renderHotNumberBoard();
 }
 
 function getCheckoutSuggestion(score, outMode = gameState.outMode) {
@@ -1588,8 +1619,325 @@ function renderActivePlayerHeatmap() {
   container.innerHTML = heatmapMarkup;
   const titleNode = container.querySelector(".profile-heatmap-title");
   if (titleNode) {
-    titleNode.textContent = `Trefferheatmap – ${displayName}`;
+    titleNode.textContent = `Trefferheatmap - ${displayName}`;
   }
+}
+
+function renderScoreboardInsights() {
+  const container = elements.scoreboardInsights;
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (gameState.viewMode !== "play" || !gameState.players.length) {
+    container.innerHTML =
+      '<p class="scoreboard-insights-empty">Die Hot Numbers erscheinen, sobald ein Leg läuft.</p>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  let hasData = false;
+
+  gameState.players.forEach((player) => {
+    const card = document.createElement("article");
+    card.className = "insights-card";
+
+    const header = document.createElement("header");
+    const title = document.createElement("h4");
+    title.textContent = getPlayerDisplayName(player) || "Spieler";
+    header.appendChild(title);
+
+    const summary = summarizePlayerNumberInsights(player);
+    const hotness = document.createElement("span");
+    hotness.className = "insights-hotness";
+    hotness.textContent =
+      summary.totalHits > 0
+        ? `${summary.totalHits} Treffer gesamt`
+        : "Noch keine Daten";
+    header.appendChild(hotness);
+    card.appendChild(header);
+
+    if (summary.totalHits === 0) {
+      const empty = document.createElement("p");
+      empty.className = "insights-card-empty";
+      empty.textContent = "Noch keine Heatmap-Würfe.";
+      card.appendChild(empty);
+    } else {
+      const chipWrapper = document.createElement("div");
+      chipWrapper.className = "insights-number-chips";
+      summary.topNumbers.forEach((entry) => {
+        hasData = true;
+        chipWrapper.appendChild(createInsightChipNode(entry, summary.totalHits));
+      });
+      if (summary.bullHits.total > 0) {
+        hasData = true;
+        chipWrapper.appendChild(
+          createInsightChipNode(
+            {
+              label: "Bull",
+              total: summary.bullHits.total,
+              breakdownLabel: buildBullBreakdown(summary.bullHits),
+            },
+            summary.totalHits
+          )
+        );
+      }
+      card.appendChild(chipWrapper);
+    }
+
+    fragment.appendChild(card);
+  });
+
+  if (!hasData) {
+    container.innerHTML =
+      '<p class="scoreboard-insights-empty">Noch keine Würfe registriert.</p>';
+    return;
+  }
+
+  container.appendChild(fragment);
+}
+
+function renderHotNumberBoard() {
+  const grid = elements.hotNumberGrid;
+  if (!grid) return;
+  const meta = elements.hotNumberMeta;
+  const emptyMarkup = '<p class="hot-number-empty">Noch keine Würfe registriert.</p>';
+
+  if (gameState.viewMode !== "play") {
+    grid.innerHTML = emptyMarkup;
+    if (meta) {
+      meta.textContent = "Hotboard erscheint während eines aktiven Spiels.";
+    }
+    return;
+  }
+
+  const activePlayer = gameState.players[gameState.activeIndex];
+  if (!activePlayer) {
+    grid.innerHTML = emptyMarkup;
+    if (meta) {
+      meta.textContent = "Kein Spieler aktiv.";
+    }
+    return;
+  }
+
+  const summary = summarizePlayerNumberInsights(activePlayer);
+  const boardData = computeHotNumberBoardData(summary);
+  const displayName = getPlayerDisplayName(activePlayer) || `Spieler ${gameState.activeIndex + 1}`;
+
+  if (meta) {
+    meta.textContent = boardData.hasData
+      ? `Sortiert nach den Hot Numbers von ${displayName}`
+      : `Standardreihenfolge für ${displayName} (noch keine Daten)`;
+  }
+
+  grid.innerHTML = "";
+  const orderedNumbers = boardData.order.length
+    ? boardData.order
+    : HOT_NUMBER_BASE_ORDER.slice();
+  const multiplierConfig = MULTIPLIER_CONFIG[gameState.dartMultiplier] || MULTIPLIER_CONFIG[1];
+
+  orderedNumbers.forEach((value) => {
+    const stats = boardData.counts.get(value);
+    grid.appendChild(
+      createHotNumberButton(
+        value,
+        multiplierConfig,
+        stats?.total || 0,
+        summary.totalHits || 0
+      )
+    );
+  });
+  grid.appendChild(createHotSpecialButton("SB", 25, false, "Single Bull"));
+  grid.appendChild(createHotSpecialButton("DB", 50, true, "Double Bull"));
+  grid.appendChild(createHotSpecialButton("0", 0, false, "Nullwurf"));
+}
+
+function computeHotNumberBoardData(summary) {
+  const stats = summary.numberStats instanceof Map ? summary.numberStats : new Map();
+  const order = HOT_NUMBER_BASE_ORDER.slice();
+  order.sort((a, b) => {
+    const hitsA = stats.get(a)?.total || 0;
+    const hitsB = stats.get(b)?.total || 0;
+    if (hitsB !== hitsA) {
+      return hitsB - hitsA;
+    }
+    return HOT_NUMBER_BASE_ORDER.indexOf(a) - HOT_NUMBER_BASE_ORDER.indexOf(b);
+  });
+  return {
+    order,
+    counts: stats,
+    hasData: summary.totalHits > 0,
+  };
+}
+
+function createHotNumberButton(baseValue, multiplierConfig, hitCount, totalHits) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dart-button hot-number-button";
+
+  const multiplier = gameState.dartMultiplier;
+  const score = baseValue * multiplier;
+  const label = multiplier === 1 ? `${baseValue}` : `${multiplierConfig.short}${baseValue}`;
+  const readable =
+    multiplier === 1 ? `Single ${baseValue}` : `${multiplierConfig.label} ${baseValue}`;
+  const isDouble = multiplier === 2;
+
+  button.dataset.number = String(baseValue);
+  button.dataset.label = label;
+  button.dataset.readable = readable;
+  button.dataset.score = String(score);
+  button.dataset.multiplier = String(multiplier);
+  button.dataset.double = String(isDouble);
+
+  const abbr = document.createElement("span");
+  abbr.className = "abbr";
+  abbr.textContent = label;
+
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "value";
+  valueSpan.textContent = String(score);
+
+  const meta = document.createElement("span");
+  meta.className = "hot-number-meta";
+  meta.textContent =
+    hitCount > 0
+      ? `${hitCount}×${totalHits > 0 ? ` (${Math.round((hitCount / totalHits) * 100)}%)` : ""}`
+      : "–";
+
+  button.append(abbr, valueSpan, meta);
+  return button;
+}
+
+function createHotSpecialButton(label, score, isDouble, readable) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dart-button hot-number-button";
+  button.dataset.label = label;
+  button.dataset.readable = readable;
+  button.dataset.score = String(score);
+  button.dataset.multiplier = String(isDouble ? 2 : 1);
+  button.dataset.double = String(isDouble);
+
+  const abbr = document.createElement("span");
+  abbr.className = "abbr";
+  abbr.textContent = label;
+
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "value";
+  valueSpan.textContent = String(score);
+
+  const meta = document.createElement("span");
+  meta.className = "hot-number-meta";
+  meta.textContent = readable;
+
+  button.append(abbr, valueSpan, meta);
+  return button;
+}
+
+function summarizePlayerNumberInsights(player) {
+  const histogram = player?.dartHitsThisGame || null;
+  const buckets = new Map();
+  let totalHits = 0;
+  let singleBull = 0;
+  let doubleBull = 0;
+
+  if (histogram) {
+    Object.entries(histogram).forEach(([key, rawValue]) => {
+      const hits = Number(rawValue) || 0;
+      if (!hits) return;
+      if (key === "MISS") {
+        return;
+      }
+      if (key === "SB") {
+        singleBull += hits;
+        totalHits += hits;
+        return;
+      }
+      if (key === "DB") {
+        doubleBull += hits;
+        totalHits += hits;
+        return;
+      }
+      const prefix = key.charAt(0);
+      const base = parseInt(key.slice(1), 10);
+      if (!Number.isFinite(base) || base <= 0) return;
+      totalHits += hits;
+      const bucket = buckets.get(base) || {
+        label: `${base}`,
+        number: base,
+        single: 0,
+        double: 0,
+        triple: 0,
+        total: 0,
+      };
+      bucket.total += hits;
+      if (prefix === "S") bucket.single += hits;
+      else if (prefix === "D") bucket.double += hits;
+      else if (prefix === "T") bucket.triple += hits;
+      buckets.set(base, bucket);
+    });
+  }
+
+  const topNumbers = Array.from(buckets.values())
+    .sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      if (b.triple !== a.triple) return b.triple - a.triple;
+      if (b.double !== a.double) return b.double - a.double;
+      return a.number - b.number;
+    })
+    .slice(0, 4);
+
+  return {
+    topNumbers,
+    totalHits,
+    bullHits: {
+      sb: singleBull,
+      db: doubleBull,
+      total: singleBull + doubleBull,
+    },
+    numberStats: buckets,
+  };
+}
+
+function createInsightChipNode(entry, totalHits) {
+  const chip = document.createElement("div");
+  chip.className = "insights-chip";
+
+  const title = document.createElement("strong");
+  const share = totalHits > 0 ? Math.round((entry.total / totalHits) * 100) : 0;
+  const titleParts = [`${entry.label || entry.number || "-"}`];
+  if (entry.total) {
+    titleParts.push(`${entry.total} Treffer`);
+  }
+  if (share) {
+    titleParts.push(`${share}%`);
+  }
+  title.textContent = titleParts.join(" · ");
+
+  const detail = document.createElement("span");
+  detail.textContent = entry.breakdownLabel || buildInsightBreakdownLabel(entry);
+
+  chip.appendChild(title);
+  chip.appendChild(detail);
+  return chip;
+}
+
+function buildInsightBreakdownLabel(entry) {
+  const parts = [];
+  if (entry.triple) parts.push(`T${entry.triple}`);
+  if (entry.double) parts.push(`D${entry.double}`);
+  if (entry.single) parts.push(`S${entry.single}`);
+  if (!parts.length) {
+    return "Variiert";
+  }
+  return parts.join(" · ");
+}
+
+function buildBullBreakdown(bullHits) {
+  const parts = [];
+  if (bullHits.sb) parts.push(`SB ${bullHits.sb}`);
+  if (bullHits.db) parts.push(`DB ${bullHits.db}`);
+  return parts.join(" · ") || "Bull";
 }
 
 function findCheckoutCombos(target, requiresDouble) {
@@ -2056,6 +2404,7 @@ function setDartMultiplier(multiplier) {
   gameState.dartMultiplier = multiplier;
   updateDartModeButtons();
   updateDartNumberButtons();
+  renderHotNumberBoard();
 }
 
 function updateDartModeButtons() {
