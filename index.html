@@ -347,6 +347,21 @@
           <button type="button" class="dart-number-order-btn" data-order="adjacent">Nachbarn</button>
           <button type="button" class="dart-number-order-btn" data-order="dartboard">Dartboard</button>
         </div>
+        <section class="card hot-board inline" aria-labelledby="hot-board-title">
+          <div class="hot-board-header">
+            <div>
+              <h3 id="hot-board-title">Hot Number Board</h3>
+              <p id="hot-number-meta">Sortiert nach aktuellen Treffern.</p>
+            </div>
+            <div class="hot-board-mode" role="group" aria-label="Hot-Number Quelle wählen">
+              <button type="button" class="hot-board-mode-btn active" data-mode="live">Live</button>
+              <button type="button" class="hot-board-mode-btn" data-mode="history">Historisch</button>
+            </div>
+          </div>
+          <div id="hot-number-grid" class="hot-number-grid" aria-live="polite">
+            <p class="hot-number-empty">Noch keine Würfe registriert.</p>
+          </div>
+        </section>
         <div class="dart-mode-switch" role="group" aria-label="Multiplikator wählen">
           <button type="button" class="dart-mode-button active" data-multiplier="1">Single</button>
           <button type="button" class="dart-mode-button" data-multiplier="2">Double</button>

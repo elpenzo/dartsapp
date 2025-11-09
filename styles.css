@@ -2182,3 +2182,15 @@ body:not(.sets-mode) .player-legs-wrapper {
     grid-template-columns: 1fr;
   }
 }
+.hot-number-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.hot-number-grid .hot-number-button {
+  flex: 1 1 96px;
+  max-width: 140px;
+  align-items: flex-start;
+}

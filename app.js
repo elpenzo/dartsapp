@@ -1711,13 +1711,15 @@ function renderHotNumberBoard() {
   const meta = elements.hotNumberMeta;
   const emptyMarkup = '<p class="hot-number-empty">Noch keine Würfe registriert.</p>';
 
-  if (gameState.viewMode !== "play") {
+  if (!gameState.players.length) {
     grid.innerHTML = emptyMarkup;
-    if (meta) meta.textContent = "Hotboard erscheint während eines aktiven Spiels.";
+    if (meta) meta.textContent = "Hotboard benötigt mindestens einen Spieler.";
     return;
   }
 
-  const activePlayer = gameState.players[gameState.activeIndex];
+  const fallbackPlayer = gameState.players[0];
+  const activePlayer =
+    gameState.players[gameState.activeIndex] || fallbackPlayer;
   if (!activePlayer) {
     grid.innerHTML = emptyMarkup;
     if (meta) meta.textContent = "Kein Spieler aktiv.";
