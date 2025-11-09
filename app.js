@@ -511,7 +511,7 @@ async function initialize() {
   window.addEventListener("resize", closeMainMenu);
   window.addEventListener("orientationchange", closeMainMenu);
   if (elements.rematchBtn) {
-    elements.rematchBtn.addEventListener("click", restartMatchWithSameSettings);
+    elements.rematchBtn.addEventListener("click", () => restartMatchWithSameSettings());
   }
   setRematchVisibility(false);
   if (elements.tournamentForm) {
@@ -905,6 +905,8 @@ function executeInterpretation(interpretation) {
     case "undo":
       undoLastTurn();
       return true;
+    case "rematch":
+      return restartMatchWithSameSettings({ announce: true });
     case "newGame":
       resetGame();
       return true;
@@ -1018,11 +1020,22 @@ function interpretSegment(rawSegment) {
   const commands = {
     bust: ["bust", "passt", "uberworfen", "berworfen"],
     undo: ["ruckgangig", "zuruck", "undo"],
-    newGame: ["neues spiel", "neues leg", "restart"],
+    rematch: [
+      "neues leg",
+      "gleiche spieler",
+      "gleiche einstellung",
+      "rematch",
+      "selbe reihenfolge",
+      "restart",
+    ],
+    newGame: ["neues spiel", "neues match", "setup"],
   };
 
   if (containsCommand(input, commands.bust)) return { type: "bust", readable: "Bust" };
   if (containsCommand(input, commands.undo)) return { type: "undo", readable: "Rueckgaengig" };
+  if (containsCommand(input, commands.rematch)) {
+    return { type: "rematch", readable: "Rematch starten" };
+  }
   if (containsCommand(input, commands.newGame)) return { type: "newGame", readable: "Neues Spiel" };
 
   const dart = parseDartPhrase(input);
@@ -2569,13 +2582,21 @@ function handleMainMenuKeydown(event) {
   }
 }
 
-function restartMatchWithSameSettings() {
+function restartMatchWithSameSettings(options = {}) {
+  const announce = Boolean(options.announce);
   const config = gameState.lastRematchConfig;
   if (!config || !Array.isArray(config.playerConfigs) || config.playerConfigs.length < 2) {
-    return;
+    if (announce) {
+      notifyVoiceStatus("error", "Kein abgeschlossenes Spiel zum Neustart gefunden");
+    }
+    return false;
   }
   startGame(config.playerConfigs, config.startingScore, config.outMode, config.matchMode);
   setViewMode("play");
+  if (announce) {
+    notifyVoiceStatus("success", "Rematch gestartet");
+  }
+  return true;
 }
 
 function prepareRematchConfig() {
@@ -3533,6 +3554,30 @@ function updateLeaderboardSortButtons() {
   });
 }
 
+const LEADERBOARD_COLUMN_LABELS = {
+  rank: "Platz",
+  player: "Spieler",
+  average: "O/Dart",
+  threeDart: "O 3-Dart",
+  first12: "O erste 12",
+  checkout: "Checkout %",
+  triple: "Triple %",
+  double: "Double %",
+  sets: "Saetze",
+  legs: "Legs",
+  games: "Spiele",
+};
+
+function setLeaderboardCellLabel(cell, key) {
+  if (!cell) return;
+  const label = LEADERBOARD_COLUMN_LABELS[key];
+  if (label) {
+    cell.dataset.label = label;
+  } else {
+    delete cell.dataset.label;
+  }
+}
+
 function renderLeaderboard() {
   if (!elements.leaderboardBody || !elements.leaderboardEmpty) return;
   updateLeaderboardSortButtons();
@@ -3612,9 +3657,11 @@ function renderLeaderboard() {
 
     const rankCell = document.createElement("td");
     rankCell.textContent = String(index + 1);
+    setLeaderboardCellLabel(rankCell, "rank");
     tr.appendChild(rankCell);
 
     const playerCell = document.createElement("td");
+    setLeaderboardCellLabel(playerCell, "player");
     const playerWrapper = document.createElement("div");
     playerWrapper.className = "leaderboard-player-cell";
 
@@ -3654,38 +3701,47 @@ function renderLeaderboard() {
 
     const averageCell = document.createElement("td");
     averageCell.textContent = entry.averageLabel;
+    setLeaderboardCellLabel(averageCell, "average");
     tr.appendChild(averageCell);
 
     const threeDartCell = document.createElement("td");
     threeDartCell.textContent = entry.threeDartLabel;
+    setLeaderboardCellLabel(threeDartCell, "threeDart");
     tr.appendChild(threeDartCell);
 
     const first12Cell = document.createElement("td");
     first12Cell.textContent = entry.first12AverageLabel;
+    setLeaderboardCellLabel(first12Cell, "first12");
     tr.appendChild(first12Cell);
 
     const checkoutCell = document.createElement("td");
     checkoutCell.textContent = entry.checkoutRateLabel;
+    setLeaderboardCellLabel(checkoutCell, "checkout");
     tr.appendChild(checkoutCell);
 
     const tripleCell = document.createElement("td");
     tripleCell.textContent = entry.tripleRateLabel;
+    setLeaderboardCellLabel(tripleCell, "triple");
     tr.appendChild(tripleCell);
 
     const doubleCell = document.createElement("td");
     doubleCell.textContent = entry.doubleRateLabel;
+    setLeaderboardCellLabel(doubleCell, "double");
     tr.appendChild(doubleCell);
 
     const setsCell = document.createElement("td");
     setsCell.textContent = String(entry.sets);
+    setLeaderboardCellLabel(setsCell, "sets");
     tr.appendChild(setsCell);
 
     const legsCell = document.createElement("td");
     legsCell.textContent = String(entry.legs);
+    setLeaderboardCellLabel(legsCell, "legs");
     tr.appendChild(legsCell);
 
     const gamesCell = document.createElement("td");
     gamesCell.textContent = String(entry.games);
+    setLeaderboardCellLabel(gamesCell, "games");
     tr.appendChild(gamesCell);
 
     fragment.appendChild(tr);

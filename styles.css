@@ -375,6 +375,90 @@ body.leaderboard-view .leaderboard-card {
   font-weight: 700;
 }
 
+@media (max-width: 960px) {
+  .leaderboard-table-wrapper {
+    overflow: visible;
+  }
+
+  .leaderboard-table {
+    min-width: 0;
+  }
+
+  .leaderboard-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .leaderboard-table,
+  .leaderboard-table tbody,
+  .leaderboard-table tr,
+  .leaderboard-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .leaderboard-table tbody tr {
+    margin-bottom: 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 14px;
+    padding: 0.85rem 1rem;
+    background: rgba(36, 85, 245, 0.04);
+    box-shadow: 0 10px 22px rgba(7, 11, 26, 0.12);
+  }
+
+  .leaderboard-table td {
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--surface-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .leaderboard-table td:last-child {
+    border-bottom: none;
+  }
+
+  .leaderboard-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    flex: 1 1 45%;
+  }
+
+  .leaderboard-table td[data-label="Spieler"] {
+    display: block;
+    border-bottom: 1px solid var(--surface-border);
+    padding-top: 0;
+    padding-bottom: 0.75rem;
+  }
+
+  .leaderboard-table td[data-label="Spieler"]::before {
+    display: none;
+  }
+
+  .leaderboard-player-cell {
+    width: 100%;
+  }
+
+  .leaderboard-table td[data-label="Platz"]::before {
+    flex: 0 0 auto;
+    min-width: 70px;
+  }
+
+  .leaderboard-table td[data-label="Spiele"] {
+    border-bottom: none;
+  }
+}
+
 .leaderboard-player-cell {
   display: flex;
   align-items: center;
