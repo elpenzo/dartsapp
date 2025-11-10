@@ -1,10 +1,30 @@
+require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, "data");
+
+function resolveStorageDir() {
+  if (process.env.PROFILES_STORAGE_DIR) {
+    return path.resolve(process.env.PROFILES_STORAGE_DIR);
+  }
+
+  if (process.env.USERPROFILE) {
+    const sharePointRoot = path.join(
+      process.env.USERPROFILE,
+      "OneDrive - friendWorks GmbH"
+    );
+    if (fs.existsSync(sharePointRoot)) {
+      return path.join(sharePointRoot, "Apps", "dartsstats");
+    }
+  }
+
+  return path.join(__dirname, "data");
+}
+
+const DATA_DIR = resolveStorageDir();
 const DATA_FILE = path.join(DATA_DIR, "profiles.json");
 
 app.use(express.json({ limit: "10mb" }));
@@ -63,5 +83,6 @@ app.use((_req, res) => {
 });
 
 app.listen(PORT, () => {
+  console.log(`Profile werden in ${DATA_FILE} gespeichert.`);
   console.log(`Server läuft auf http://localhost:${PORT}`);
 });
