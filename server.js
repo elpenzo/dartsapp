@@ -11,16 +11,6 @@ function resolveStorageDir() {
     return path.resolve(process.env.PROFILES_STORAGE_DIR);
   }
 
-  if (process.env.USERPROFILE) {
-    const sharePointRoot = path.join(
-      process.env.USERPROFILE,
-      "OneDrive - friendWorks GmbH"
-    );
-    if (fs.existsSync(sharePointRoot)) {
-      return path.join(sharePointRoot, "Apps", "dartsstats");
-    }
-  }
-
   return path.join(__dirname, "data");
 }
 
