@@ -109,6 +109,7 @@ const elements = {
   hotNumberGrid: document.getElementById("hot-number-grid"),
   hotNumberMeta: document.getElementById("hot-number-meta"),
   hotBoardModeButtons: Array.from(document.querySelectorAll(".hot-board-mode-btn")),
+  hotBoardButtons: [],
   undoBtn: document.getElementById("undo-btn"),
   dartModeSwitch: document.querySelector(".dart-mode-switch"),
   dartModeButtons: Array.from(document.querySelectorAll(".dart-mode-button")),
@@ -1760,7 +1761,7 @@ function renderHotNumberBoard() {
   const orderedNumbers = boardData.order.length ? boardData.order : HOT_NUMBER_BASE_ORDER.slice();
   const multiplierConfig = MULTIPLIER_CONFIG[currentMultiplier] || MULTIPLIER_CONFIG[1];
 
-  orderedNumbers.forEach((value) => {
+  orderedNumbers.slice(0, 10).forEach((value) => {
     const stats = boardData.counts.get(value);
     grid.appendChild(
       createHotNumberButton(value, multiplierConfig, stats, shareBase, currentMultiplier)
@@ -1769,6 +1770,9 @@ function renderHotNumberBoard() {
   grid.appendChild(createHotSpecialButton("SB", 25, false, "Single Bull"));
   grid.appendChild(createHotSpecialButton("DB", 50, true, "Double Bull"));
   grid.appendChild(createHotSpecialButton("0", 0, false, "Nullwurf"));
+
+  elements.hotBoardButtons = Array.from(grid.querySelectorAll(".hot-number-button"));
+  setupDartSwipeGestures(elements.hotBoardButtons);
 }
 
 function computeHotNumberBoardData(summary, multiplier) {
@@ -1827,6 +1831,13 @@ function createHotNumberButton(baseValue, multiplierConfig, entry, totalHits, mu
   button.dataset.score = String(score);
   button.dataset.multiplier = String(multiplier);
   button.dataset.double = String(isDouble);
+  if (baseValue > 0) {
+    button.dataset.swipeLeft = "\u2190 T";
+    button.dataset.swipeRight = "D \u2192";
+  } else {
+    delete button.dataset.swipeLeft;
+    delete button.dataset.swipeRight;
+  }
 
   const abbr = document.createElement("span");
   abbr.className = "abbr";
@@ -1856,6 +1867,8 @@ function createHotSpecialButton(label, score, isDouble, readable) {
   button.dataset.score = String(score);
   button.dataset.multiplier = String(isDouble ? 2 : 1);
   button.dataset.double = String(isDouble);
+  delete button.dataset.swipeLeft;
+  delete button.dataset.swipeRight;
 
   const abbr = document.createElement("span");
   abbr.className = "abbr";
@@ -2574,9 +2587,9 @@ function updateDartNumberButtons() {
   });
 }
 
-function setupDartSwipeGestures() {
-  if (!elements.dartNumberButtons.length) return;
-  elements.dartNumberButtons.forEach((button) => {
+function setupDartSwipeGestures(buttons = elements.dartNumberButtons) {
+  if (!buttons?.length) return;
+  buttons.forEach((button) => {
     if (dartSwipeBoundButtons.has(button)) return;
     dartSwipeBoundButtons.add(button);
     button.addEventListener("pointerdown", onDartNumberPointerDown);
