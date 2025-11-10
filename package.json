@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "serve:static": "serve ."
+    "serve:static": "serve .",
+    "sync:profiles": "node scripts/sync-profiles.js"
   },
   "dependencies": {
     "@azure/data-tables": "^13.3.1",
