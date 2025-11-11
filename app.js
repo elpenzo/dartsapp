@@ -142,6 +142,8 @@ const elements = {
   profileExportBtn: document.getElementById("profile-export"),
   profileImportBtn: document.getElementById("profile-import"),
   profileImportInput: document.getElementById("profile-import-file"),
+  profileStorageSelect: document.getElementById("profile-storage-select"),
+  profileStorageIndicator: document.getElementById("profile-storage-indicator"),
   profileDataStatus: document.getElementById("profile-data-status"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
@@ -254,10 +256,13 @@ let profiles = [];
 let pendingProfileImage = null;
 let editingProfileId = null;
 const PROFILES_API_URL = "/api/profiles";
+const PROFILE_STORAGE_INFO_URL = "/api/profile-storage";
 const LAYOUT_MODE_STORAGE_KEY = "friendDartLayoutMode";
 const VALID_LAYOUT_MODES = ["auto", "desktop", "mobile"];
 let pendingServerSync = null;
 let serverSyncDisabled = false;
+let profileStorageInfo = null;
+let suppressProfileStorageChange = false;
 
 async function fetchProfilesFromServer() {
   if (typeof fetch !== "function") return null;
@@ -286,6 +291,134 @@ function scheduleProfileSync() {
     pendingServerSync = null;
     syncProfilesToServer(profiles);
   }, 300);
+}
+
+function getDefaultProfileStorageInfo() {
+  return {
+    mode: "file",
+    label: "Lokale Datei (profiles.json)",
+    options: [{ mode: "file", label: "Lokale Datei (profiles.json)" }],
+  };
+}
+
+function applyProfileStorageInfo(info) {
+  const normalized = (() => {
+    if (!info || typeof info !== "object") {
+      return getDefaultProfileStorageInfo();
+    }
+    const options =
+      Array.isArray(info.options) && info.options.length
+        ? info.options
+        : getDefaultProfileStorageInfo().options;
+    const mode = info.mode && options.some((option) => option.mode === info.mode) ? info.mode : options[0].mode;
+    const activeOption = options.find((option) => option.mode === mode);
+    return {
+      mode,
+      label: info.label || activeOption?.label || getDefaultProfileStorageInfo().label,
+      description: info.description || activeOption?.description || "",
+      options,
+    };
+  })();
+
+  profileStorageInfo = normalized;
+
+  if (elements.profileStorageIndicator) {
+    elements.profileStorageIndicator.textContent = `Quelle: ${normalized.label}`;
+  }
+
+  if (elements.profileStorageSelect) {
+    suppressProfileStorageChange = true;
+    elements.profileStorageSelect.innerHTML = "";
+    normalized.options.forEach((option) => {
+      const optionElement = document.createElement("option");
+      optionElement.value = option.mode;
+      optionElement.textContent = option.label;
+      elements.profileStorageSelect.appendChild(optionElement);
+    });
+    if (!normalized.options.length) {
+      const optionElement = document.createElement("option");
+      optionElement.value = "";
+      optionElement.textContent = "Keine Quelle verf\u00fcgbar";
+      elements.profileStorageSelect.appendChild(optionElement);
+      elements.profileStorageSelect.disabled = true;
+    } else {
+      elements.profileStorageSelect.disabled = normalized.options.length <= 1;
+      elements.profileStorageSelect.value = normalized.mode;
+    }
+    suppressProfileStorageChange = false;
+  }
+}
+
+async function refreshProfileStorageInfo(options = {}) {
+  const { silent = false } = options;
+  if (typeof fetch !== "function") {
+    const fallback = getDefaultProfileStorageInfo();
+    applyProfileStorageInfo(fallback);
+    return fallback;
+  }
+
+  try {
+    const response = await fetch(PROFILE_STORAGE_INFO_URL, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Serverantwort ${response.status}`);
+    }
+    const data = await response.json();
+    applyProfileStorageInfo(data);
+    if (!silent) {
+      setProfileDataStatus("", `Profilbasis: ${profileStorageInfo.label}`);
+    }
+    return data;
+  } catch (error) {
+    console.warn("Profilbasis konnte nicht geladen werden:", error);
+    const fallback = getDefaultProfileStorageInfo();
+    applyProfileStorageInfo(fallback);
+    if (!silent) {
+      setProfileDataStatus("error", "Profilbasis konnte nicht vom Server geladen werden.");
+    }
+    return fallback;
+  }
+}
+
+async function changeProfileStorageMode(mode) {
+  if (typeof fetch !== "function") return null;
+  const previousMode = profileStorageInfo?.mode || getDefaultProfileStorageInfo().mode;
+  setProfileDataStatus("", "Profilbasis wird gewechselt \u2026");
+  try {
+    const response = await fetch(PROFILE_STORAGE_INFO_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    if (!response.ok) {
+      throw new Error(`Serverantwort ${response.status}`);
+    }
+    const data = await response.json();
+    applyProfileStorageInfo(data);
+    setProfileDataStatus("success", `Profilbasis: ${profileStorageInfo.label}`);
+    await reloadProfilesFromServer();
+    return data;
+  } catch (error) {
+    console.error("Profilbasis konnte nicht gewechselt werden:", error);
+    setProfileDataStatus("error", "Profilbasis konnte nicht gewechselt werden.");
+    if (elements.profileStorageSelect) {
+      suppressProfileStorageChange = true;
+      elements.profileStorageSelect.value = previousMode;
+      suppressProfileStorageChange = false;
+    }
+    applyProfileStorageInfo(profileStorageInfo || getDefaultProfileStorageInfo());
+    throw error;
+  }
+}
+
+async function onProfileStorageSelectChange(event) {
+  if (suppressProfileStorageChange) return;
+  const mode = event.target.value;
+  if (!mode || mode === profileStorageInfo?.mode) return;
+  try {
+    await changeProfileStorageMode(mode);
+  } catch (_error) {
+    // Fehler wurden bereits gemeldet.
+  }
 }
 
 async function syncProfilesToServer(currentProfiles) {
@@ -609,12 +742,12 @@ async function initialize() {
   if (elements.profileImportInput) {
     elements.profileImportInput.addEventListener("change", onProfileImportFileChange);
   }
+  if (elements.profileStorageSelect) {
+    elements.profileStorageSelect.addEventListener("change", onProfileStorageSelectChange);
+  }
 
-  await loadProfiles();
-  forEachPlayerSlot(({ fallback, optional }, select, input) => {
-    handleProfileSelection(select, input, optional ? "" : fallback);
-  });
-  renderLeaderboard();
+  await refreshProfileStorageInfo({ silent: true });
+  await reloadProfilesFromServer();
 
   updateViewModeUI();
 
@@ -3873,6 +4006,14 @@ async function loadProfiles() {
 
   renderProfileOptions();
   renderProfileList();
+}
+
+async function reloadProfilesFromServer() {
+  await loadProfiles();
+  forEachPlayerSlot(({ fallback, optional }, select, input) => {
+    handleProfileSelection(select, input, optional ? "" : fallback);
+  });
+  renderLeaderboard();
 }
 
 function saveProfiles() {

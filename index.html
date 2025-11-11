@@ -446,20 +446,29 @@
         </div>
       </form>
       <div class="profile-data-actions">
+        <div class="profile-storage-switch" role="group" aria-label="Profilbasis waehlen">
+          <label for="profile-storage-select">Profilbasis</label>
+          <select id="profile-storage-select">
+            <option value="azure">Azure Table</option>
+            <option value="file">Lokale Datei</option>
+          </select>
+          <span id="profile-storage-indicator" class="profile-storage-indicator" aria-live="polite">
+            Quelle: Azure Table
+          </span>
+        </div>
         <div class="profile-actions-inline" role="group" aria-label="Profil-Dateien verwalten">
           <button type="button" id="profile-export" class="ghost profile-icon-btn" title="Profile exportieren">
-            <span aria-hidden="true">💾</span>
+            <span aria-hidden="true">??</span>
             <span class="sr-only">Profile exportieren</span>
           </button>
           <button type="button" id="profile-import" class="ghost profile-icon-btn" title="Profile importieren">
-            <span aria-hidden="true">📥</span>
+            <span aria-hidden="true">??</span>
             <span class="sr-only">Profile importieren</span>
           </button>
         </div>
         <input id="profile-import-file" type="file" accept="application/json" hidden />
         <p id="profile-data-status" class="profile-data-status" role="status" aria-live="polite"></p>
-      </div>
-      <div class="profile-list-container">
+      </div>      <div class="profile-list-container">
         <h3>Gespeicherte Profile</h3>
         <ul id="profile-list" class="profile-list"></ul>
       </div>
@@ -543,3 +552,4 @@
 </body>
 
 </html>
+

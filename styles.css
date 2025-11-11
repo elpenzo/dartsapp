@@ -1776,6 +1776,26 @@ body:not(.sets-mode) .player-legs-wrapper {
   gap: 0.5rem;
 }
 
+.profile-storage-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.profile-storage-switch label {
+  font-weight: 600;
+}
+
+.profile-storage-switch select {
+  min-width: 9rem;
+}
+
+.profile-storage-indicator {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
 .profile-data-status {
   min-height: 1.25rem;
   margin: 0;
