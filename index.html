@@ -414,11 +414,17 @@
         </div>
       </div>
       <div class="audio-controls">
-        <button type="button" id="celebration-play-btn" class="ghost">
+        <button type="button" id="chase-audio-play-btn" class="ghost">
           Chase the Sun abspielen
         </button>
+        <button type="button" id="anthem-play-btn" class="ghost">
+          Gladbach-Hymne abspielen
+        </button>
+        <button type="button" id="darts-audio-play-btn" class="ghost">
+          Darts 180 abspielen
+        </button>
         <p class="audio-controls-hint">
-          Wird automatisch bei W&uuml;rfen &gt; 60 Punkten abgespielt.
+          Chase the Sun startet automatisch bei W&uuml;rfen &gt; 60 Punkten, die Gladbach-Hymne bei W&uuml;rfen &gt; 100 Punkten und Darts 180 bei W&uuml;rfen &gt; 180 Punkten.
         </p>
       </div>
     </section>
@@ -556,7 +562,9 @@
     </article>
   </template>
 
-  <audio id="celebration-audio" src="data/chase-the-sun-win.mp3" preload="auto"></audio>
+  <audio id="chase-audio" src="data/chase-the-sun-win.mp3" preload="auto"></audio>
+  <audio id="anthem-audio" src="data/hymne-gladbach.mp3" preload="auto"></audio>
+  <audio id="darts-audio" src="data/darts-180.mp3" preload="auto"></audio>
 
   <script src="app.js" type="module"></script>
 </body>

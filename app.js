@@ -144,8 +144,12 @@ const elements = {
   profileImportInput: document.getElementById("profile-import-file"),
   profileStorageSelect: document.getElementById("profile-storage-select"),
   profileStorageIndicator: document.getElementById("profile-storage-indicator"),
-  celebrationPlayBtn: document.getElementById("celebration-play-btn"),
-  celebrationAudio: document.getElementById("celebration-audio"),
+  chaseAudioPlayBtn: document.getElementById("chase-audio-play-btn"),
+  chaseAudio: document.getElementById("chase-audio"),
+  anthemPlayBtn: document.getElementById("anthem-play-btn"),
+  anthemAudio: document.getElementById("anthem-audio"),
+  dartsAudioPlayBtn: document.getElementById("darts-audio-play-btn"),
+  dartsAudio: document.getElementById("darts-audio"),
   profileDataStatus: document.getElementById("profile-data-status"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
@@ -265,7 +269,7 @@ let pendingServerSync = null;
 let serverSyncDisabled = false;
 let profileStorageInfo = null;
 let suppressProfileStorageChange = false;
-let celebrationAudioErrorLogged = false;
+const audioPlaybackErrors = new Set();
 
 async function fetchProfilesFromServer() {
   if (typeof fetch !== "function") return null;
@@ -296,33 +300,50 @@ function scheduleProfileSync() {
   }, 300);
 }
 
-function playCelebrationAudio() {
-  const audio = elements.celebrationAudio;
-  if (!audio) return;
+function playAudioClip(audioElement, errorKey) {
+  if (!audioElement) return;
   try {
-    audio.currentTime = 0;
-    const playPromise = audio.play();
+    audioElement.currentTime = 0;
+    const playPromise = audioElement.play();
     if (playPromise && typeof playPromise.catch === "function") {
       playPromise.catch((error) => {
-        if (!celebrationAudioErrorLogged) {
-          celebrationAudioErrorLogged = true;
+        if (!audioPlaybackErrors.has(errorKey)) {
+          audioPlaybackErrors.add(errorKey);
           console.warn("Sound konnte nicht abgespielt werden:", error);
         }
       });
     }
   } catch (error) {
-    if (!celebrationAudioErrorLogged) {
-      celebrationAudioErrorLogged = true;
+    if (!audioPlaybackErrors.has(errorKey)) {
+      audioPlaybackErrors.add(errorKey);
       console.warn("Sound konnte nicht abgespielt werden:", error);
     }
   }
 }
 
+function playChaseAudio() {
+  playAudioClip(elements.chaseAudio, "chase");
+}
+
+function playAnthemAudio() {
+  playAudioClip(elements.anthemAudio, "anthem");
+}
+
+function playDartsAudio() {
+  playAudioClip(elements.dartsAudio, "darts");
+}
+
 function celebrateBigScore(total) {
-  if (!Number.isFinite(total) || total <= 60) {
+  if (!Number.isFinite(total)) {
     return;
   }
-  playCelebrationAudio();
+  if (total > 180) {
+    playDartsAudio();
+  } else if (total > 100) {
+    playAnthemAudio();
+  } else if (total > 60) {
+    playChaseAudio();
+  }
 }
 
 function getDefaultProfileStorageInfo() {
@@ -777,8 +798,14 @@ async function initialize() {
   if (elements.profileStorageSelect) {
     elements.profileStorageSelect.addEventListener("change", onProfileStorageSelectChange);
   }
-  if (elements.celebrationPlayBtn) {
-    elements.celebrationPlayBtn.addEventListener("click", () => playCelebrationAudio());
+  if (elements.chaseAudioPlayBtn) {
+    elements.chaseAudioPlayBtn.addEventListener("click", () => playChaseAudio());
+  }
+  if (elements.anthemPlayBtn) {
+    elements.anthemPlayBtn.addEventListener("click", () => playAnthemAudio());
+  }
+  if (elements.dartsAudioPlayBtn) {
+    elements.dartsAudioPlayBtn.addEventListener("click", () => playDartsAudio());
   }
 
   await refreshProfileStorageInfo({ silent: true });
