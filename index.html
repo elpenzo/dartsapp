@@ -413,6 +413,14 @@
           </div>
         </div>
       </div>
+      <div class="audio-controls">
+        <button type="button" id="celebration-play-btn" class="ghost">
+          Chase the Sun abspielen
+        </button>
+        <p class="audio-controls-hint">
+          Wird automatisch bei W&uuml;rfen &gt; 60 Punkten abgespielt.
+        </p>
+      </div>
     </section>
 
     <section class="card profile-manager" aria-labelledby="profile-title">
@@ -547,6 +555,8 @@
       </dl>
     </article>
   </template>
+
+  <audio id="celebration-audio" src="data/chase-the-sun-win.mp3" preload="auto"></audio>
 
   <script src="app.js" type="module"></script>
 </body>

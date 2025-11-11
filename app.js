@@ -144,6 +144,8 @@ const elements = {
   profileImportInput: document.getElementById("profile-import-file"),
   profileStorageSelect: document.getElementById("profile-storage-select"),
   profileStorageIndicator: document.getElementById("profile-storage-indicator"),
+  celebrationPlayBtn: document.getElementById("celebration-play-btn"),
+  celebrationAudio: document.getElementById("celebration-audio"),
   profileDataStatus: document.getElementById("profile-data-status"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
@@ -263,6 +265,7 @@ let pendingServerSync = null;
 let serverSyncDisabled = false;
 let profileStorageInfo = null;
 let suppressProfileStorageChange = false;
+let celebrationAudioErrorLogged = false;
 
 async function fetchProfilesFromServer() {
   if (typeof fetch !== "function") return null;
@@ -291,6 +294,35 @@ function scheduleProfileSync() {
     pendingServerSync = null;
     syncProfilesToServer(profiles);
   }, 300);
+}
+
+function playCelebrationAudio() {
+  const audio = elements.celebrationAudio;
+  if (!audio) return;
+  try {
+    audio.currentTime = 0;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch((error) => {
+        if (!celebrationAudioErrorLogged) {
+          celebrationAudioErrorLogged = true;
+          console.warn("Sound konnte nicht abgespielt werden:", error);
+        }
+      });
+    }
+  } catch (error) {
+    if (!celebrationAudioErrorLogged) {
+      celebrationAudioErrorLogged = true;
+      console.warn("Sound konnte nicht abgespielt werden:", error);
+    }
+  }
+}
+
+function celebrateBigScore(total) {
+  if (!Number.isFinite(total) || total <= 60) {
+    return;
+  }
+  playCelebrationAudio();
 }
 
 function getDefaultProfileStorageInfo() {
@@ -744,6 +776,9 @@ async function initialize() {
   }
   if (elements.profileStorageSelect) {
     elements.profileStorageSelect.addEventListener("change", onProfileStorageSelectChange);
+  }
+  if (elements.celebrationPlayBtn) {
+    elements.celebrationPlayBtn.addEventListener("click", () => playCelebrationAudio());
   }
 
   await refreshProfileStorageInfo({ silent: true });
@@ -1443,7 +1478,10 @@ function finishTurn(bust, legWon) {
 }
 
 function pushHistory(turn, player, legWon = false) {
-  const total = turn.darts.reduce((sum, dart) => sum + dart.score, 0);
+  const total = turn.darts.reduce((sum, dart) => sum + (dart.score || 0), 0);
+  if (!turn.bust) {
+    celebrateBigScore(total);
+  }
   const entry = {
     id: uid(),
     playerId: player.id,
