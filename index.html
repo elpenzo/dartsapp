@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 
-<body>
+<body class="theme-light">
   <header class="app-header">
     <h1>friendDartBoard</h1>
     <p class="tagline">Sprich deine Würfe - die App protokolliert das Leg.</p>
@@ -44,6 +44,18 @@
             <button type="button" class="layout-toggle-btn" data-layout="desktop">Web</button>
             <button type="button" class="layout-toggle-btn" data-layout="mobile">Mobil</button>
           </div>
+        </div>
+        <div class="main-menu-section">
+          <p class="main-menu-label">Farbschema</p>
+          <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false">
+            <span class="theme-toggle-track" aria-hidden="true">
+              <span class="theme-toggle-thumb"></span>
+            </span>
+            <span class="theme-toggle-text">
+              <span class="theme-toggle-label">Dunkler Modus</span>
+              <span class="theme-toggle-description">Aktuell: Hell</span>
+            </span>
+          </button>
         </div>
       </div>
     </div>
