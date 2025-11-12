@@ -1646,6 +1646,35 @@ function summarizeTurn(turn) {
   return turn.darts.map((dart) => shortLabelForDart(dart)).join(" · ");
 }
 
+function findBestThreeDartTurn(turns) {
+  if (!Array.isArray(turns)) return null;
+  let best = null;
+
+  turns.forEach((turn) => {
+    if (!turn || turn.bust || !Array.isArray(turn.darts) || !turn.darts.length) {
+      return;
+    }
+
+    const total = turn.darts.reduce(
+      (sum, dart) => sum + (Number(dart?.score) || 0),
+      0
+    );
+    const labels = turn.darts.map((dart) => shortLabelForDart(dart));
+    const dartsUsed = turn.darts.length;
+
+    if (
+      !best ||
+      total > best.total ||
+      (total === best.total && dartsUsed > best.dartsUsed) ||
+      (total === best.total && dartsUsed === best.dartsUsed && labels.join("|") < best.labels.join("|"))
+    ) {
+      best = { total, labels, dartsUsed };
+    }
+  });
+
+  return best;
+}
+
 function formatTurnPreview(turn) {
   if (!turn || !Array.isArray(turn.darts) || !turn.darts.length) {
     return "-";
@@ -3076,6 +3105,30 @@ function finalizeGameStats() {
       dartHistogram: entryHistogram,
     };
 
+    const bestTurn = findBestThreeDartTurn(player.history);
+    if (bestTurn) {
+      entry.bestTurn = {
+        total: bestTurn.total,
+        darts: bestTurn.labels,
+        dartsUsed: bestTurn.dartsUsed,
+      };
+
+      const previousBest = profile.stats.bestThreeDartSet || {};
+      const previousBestTotal = Number(previousBest.total) || 0;
+      const previousBestDarts = Number(previousBest.dartsUsed) || (Array.isArray(previousBest.darts) ? previousBest.darts.length : 0);
+      if (
+        bestTurn.total > previousBestTotal ||
+        (bestTurn.total === previousBestTotal && bestTurn.dartsUsed > previousBestDarts)
+      ) {
+        profile.stats.bestThreeDartSet = {
+          total: bestTurn.total,
+          darts: bestTurn.labels,
+          dartsUsed: bestTurn.dartsUsed,
+          date: entry.date,
+        };
+      }
+    }
+
     profile.history = profile.history || [];
     profile.history.unshift(entry);
     if (profile.history.length > 10) {
@@ -3978,6 +4031,7 @@ function resetProfileStats(profileId) {
   profile.stats.checkoutAttempts = 0;
   profile.stats.checkoutHits = 0;
   profile.stats.dartHistogram = createEmptyHistogram();
+  profile.stats.bestThreeDartSet = { total: 0, darts: [], dartsUsed: 0, date: null };
   profile.history = [];
   profile.updatedAt = Date.now();
   saveProfiles();
@@ -3992,6 +4046,11 @@ function onProfileListClick(event) {
   const action = button.dataset.action;
   const profileId = button.dataset.id;
   if (!profileId) return;
+
+  if (action === "view") {
+    window.location.href = `profile.html?id=${encodeURIComponent(profileId)}`;
+    return;
+  }
 
   if (action === "assign") {
     assignProfileToSlot(profileId, Number(button.dataset.slot) || 1);
@@ -4189,6 +4248,7 @@ function renderProfileList() {
           ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
           ${heatmapMarkup}
           <div class="profile-actions-inline">
+            <button type="button" class="ghost" data-action="view" data-id="${profile.id}">Details</button>
             <button type="button" class="ghost" data-action="edit" data-id="${profile.id}">Bearbeiten</button>
             <button type="button" class="ghost" data-action="reset-stats" data-id="${profile.id}">Statistiken zurücksetzen</button>
             <button type="button" class="ghost" data-action="assign" data-slot="1" data-id="${profile.id}">Als Spieler 1 wählen</button>
@@ -5233,13 +5293,33 @@ function ensureProfileStats(profile) {
   profile.stats.setsWon = profile.stats.setsWon || 0;
   profile.stats.totalPoints = profile.stats.totalPoints || 0;
   profile.stats.totalDarts = profile.stats.totalDarts || 0;
-   profile.stats.first12Points = profile.stats.first12Points || 0;
-   profile.stats.first12Darts = profile.stats.first12Darts || 0;
-   profile.stats.tripleHits = profile.stats.tripleHits || 0;
-   profile.stats.doubleHits = profile.stats.doubleHits || 0;
-   profile.stats.checkoutAttempts = profile.stats.checkoutAttempts || 0;
-   profile.stats.checkoutHits = profile.stats.checkoutHits || 0;
+  profile.stats.first12Points = profile.stats.first12Points || 0;
+  profile.stats.first12Darts = profile.stats.first12Darts || 0;
+  profile.stats.tripleHits = profile.stats.tripleHits || 0;
+  profile.stats.doubleHits = profile.stats.doubleHits || 0;
+  profile.stats.checkoutAttempts = profile.stats.checkoutAttempts || 0;
+  profile.stats.checkoutHits = profile.stats.checkoutHits || 0;
   profile.stats.dartHistogram = cloneHistogram(profile.stats.dartHistogram);
+
+  const best = profile.stats.bestThreeDartSet;
+  if (!best || typeof best !== "object") {
+    profile.stats.bestThreeDartSet = { total: 0, darts: [], dartsUsed: 0, date: null };
+  } else {
+    const darts = Array.isArray(best.darts)
+      ? best.darts.map((label) => (label != null ? String(label) : "")).filter(Boolean)
+      : [];
+    let dartsUsed = Number(best.dartsUsed);
+    if (!Number.isFinite(dartsUsed) || dartsUsed < darts.length) {
+      dartsUsed = darts.length;
+    }
+    profile.stats.bestThreeDartSet = {
+      total: Number(best.total) || 0,
+      darts,
+      dartsUsed,
+      date: typeof best.date === "string" ? best.date : best.date ? new Date(best.date).toISOString() : null,
+    };
+  }
+
   profile.history = profile.history || [];
 }
 

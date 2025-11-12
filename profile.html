@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profil-Insights</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="profile-detail-body">
+    <div class="profile-detail-shell">
+      <header class="profile-detail-header">
+        <a class="profile-back-link" href="index.html">&larr; Zurück zur Übersicht</a>
+        <div class="profile-header-text">
+          <h1 id="profile-page-title">Profil</h1>
+          <span id="profile-nickname-tag" class="profile-nickname-tag" hidden></span>
+        </div>
+      </header>
+      <main id="profile-detail" class="profile-detail" aria-live="polite">
+        <div class="profile-loading" id="profile-loading">Profil wird geladen …</div>
+      </main>
+      <div id="profile-error" class="profile-error" hidden></div>
+    </div>
+    <script src="profile-page.js" defer></script>
+  </body>
+</html>
