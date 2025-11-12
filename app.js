@@ -119,6 +119,7 @@ const elements = {
   mainMenu: document.getElementById("main-menu"),
   mainMenuTrigger: document.getElementById("main-menu-trigger"),
   layoutToggleButtons: Array.from(document.querySelectorAll(".layout-toggle-btn")),
+  themeToggleBtn: document.getElementById("theme-toggle"),
   rematchBtn: document.getElementById("rematch-btn"),
   tournamentCard: document.querySelector(".tournament-card"),
   tournamentForm: document.getElementById("tournament-form"),
@@ -244,6 +245,8 @@ const gameState = {
   hotBoardMode: "live",
   viewMode: "setup",
   layoutMode: "auto",
+  theme: "light",
+  themePreference: null,
   statsCommitted: false,
   leaderboardSort: "average",
   matchMode: DEFAULT_MATCH_MODE,
@@ -265,11 +268,15 @@ const PROFILES_API_URL = "/api/profiles";
 const PROFILE_STORAGE_INFO_URL = "/api/profile-storage";
 const LAYOUT_MODE_STORAGE_KEY = "friendDartLayoutMode";
 const VALID_LAYOUT_MODES = ["auto", "desktop", "mobile"];
+const THEME_STORAGE_KEY = "friendDartTheme";
+const VALID_THEMES = ["light", "dark"];
 let pendingServerSync = null;
 let serverSyncDisabled = false;
 let profileStorageInfo = null;
 let suppressProfileStorageChange = false;
 const audioPlaybackErrors = new Set();
+let systemThemeMediaQuery = null;
+let systemThemeChangeHandler = null;
 
 async function fetchProfilesFromServer() {
   if (typeof fetch !== "function") return null;
@@ -700,6 +707,7 @@ async function initialize() {
       button.addEventListener("click", () => setLayoutMode(button.dataset.layout || "auto"));
     });
   }
+  initializeTheme();
   if (elements.hotBoardModeButtons?.length) {
     elements.hotBoardModeButtons.forEach((button) => {
       button.addEventListener("click", () => setHotBoardMode(button.dataset.mode || "live"));
@@ -3154,6 +3162,102 @@ function updateViewModeUI() {
     renderLeaderboard();
   }
   closeMainMenu();
+}
+
+function initializeTheme() {
+  if (!document.body) return;
+  const storedPreference = getStoredThemePreference();
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    systemThemeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  }
+  const prefersDark = systemThemeMediaQuery?.matches;
+  const initialTheme = storedPreference || (prefersDark ? "dark" : "light");
+  setTheme(initialTheme, { preference: storedPreference ? "manual" : null });
+  if (elements.themeToggleBtn) {
+    elements.themeToggleBtn.addEventListener("click", onThemeToggleClick);
+  }
+  if (systemThemeMediaQuery) {
+    systemThemeChangeHandler = (event) => {
+      if (gameState.themePreference === "manual") return;
+      setTheme(event.matches ? "dark" : "light");
+    };
+    if (typeof systemThemeMediaQuery.addEventListener === "function") {
+      systemThemeMediaQuery.addEventListener("change", systemThemeChangeHandler);
+    } else if (typeof systemThemeMediaQuery.addListener === "function") {
+      systemThemeMediaQuery.addListener(systemThemeChangeHandler);
+    }
+  }
+  updateThemeToggleUI();
+}
+
+function setTheme(theme, options = {}) {
+  const { persist = false, preference } = options;
+  const normalized = VALID_THEMES.includes(theme) ? theme : "light";
+  gameState.theme = normalized;
+  if (Object.prototype.hasOwnProperty.call(options, "preference")) {
+    gameState.themePreference = preference;
+    if (preference !== "manual") {
+      try {
+        localStorage.removeItem(THEME_STORAGE_KEY);
+      } catch (error) {
+        console.warn("Themenpräferenz konnte nicht entfernt werden:", error);
+      }
+    }
+  }
+  if (document.body) {
+    document.body.classList.remove("theme-light", "theme-dark");
+    document.body.classList.add(normalized === "dark" ? "theme-dark" : "theme-light");
+  }
+  updateThemeToggleUI();
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, normalized);
+    } catch (error) {
+      console.warn("Themenpräferenz konnte nicht gespeichert werden:", error);
+    }
+  }
+}
+
+function onThemeToggleClick() {
+  const nextTheme = gameState.theme === "dark" ? "light" : "dark";
+  setTheme(nextTheme, { persist: true, preference: "manual" });
+}
+
+function updateThemeToggleUI() {
+  if (!elements.themeToggleBtn) return;
+  const isDark = gameState.theme === "dark";
+  elements.themeToggleBtn.setAttribute("aria-pressed", String(isDark));
+  elements.themeToggleBtn.dataset.theme = isDark ? "dark" : "light";
+  const actionLabel = isDark ? "Heller Modus" : "Dunkler Modus";
+  const statusLabel = isDark ? "Aktuell: Dunkel" : "Aktuell: Hell";
+  elements.themeToggleBtn.setAttribute(
+    "aria-label",
+    isDark ? "Zum hellen Modus wechseln" : "Zum dunklen Modus wechseln"
+  );
+  elements.themeToggleBtn.title = isDark ? "Zum hellen Modus wechseln" : "Zum dunklen Modus wechseln";
+  const labelElement = elements.themeToggleBtn.querySelector(".theme-toggle-label");
+  if (labelElement) {
+    labelElement.textContent = actionLabel;
+  }
+  const descriptionElement = elements.themeToggleBtn.querySelector(".theme-toggle-description");
+  if (descriptionElement) {
+    descriptionElement.textContent = statusLabel;
+  }
+}
+
+function getStoredThemePreference() {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (VALID_THEMES.includes(stored)) {
+      return stored;
+    }
+    if (stored) {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    }
+  } catch (error) {
+    console.warn("Themenpräferenz konnte nicht geladen werden:", error);
+  }
+  return null;
 }
 
 function setLayoutMode(mode) {
