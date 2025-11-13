@@ -229,6 +229,28 @@ body.play-view .voice-console {
   grid-column: 1 / span 2;
 }
 
+.training-view .app-main,
+body.training-view .app-main {
+  width: min(900px, 96vw);
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+.training-view .card:not(.training-card),
+body.training-view .card:not(.training-card) {
+  display: none;
+}
+
+.training-view .training-card,
+body.training-view .training-card {
+  display: block;
+}
+
+.training-view .voice-console,
+body.training-view .voice-console {
+  display: none;
+}
+
 .tournament-card {
   display: none;
 }
@@ -1449,6 +1471,218 @@ button.ghost {
 
 .player-card-heatmap .board-outline {
   stroke: rgba(36, 85, 245, 0.35);
+}
+
+.training-card[hidden] {
+  display: none !important;
+}
+
+.training-card {
+  display: none;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.training-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.training-mode-pill {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(36, 85, 245, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(36, 85, 245, 0.25);
+}
+
+.training-description {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+}
+
+.training-mode-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.training-mode-select label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.training-mode-select select {
+  border: 1px solid var(--surface-border);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.training-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.training-board {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .training-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+.training-target-panel,
+.training-stats-panel {
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 1.15rem;
+  background: rgba(36, 85, 245, 0.03);
+}
+
+.training-stats-panel {
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.training-panel-label {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+}
+
+.training-target-value {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+}
+
+.training-target-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(38px, 1fr));
+  gap: 0.4rem;
+}
+
+.training-target {
+  border-radius: 8px;
+  padding: 0.35rem 0.25rem;
+  text-align: center;
+  font-weight: 600;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  color: var(--text-muted);
+}
+
+.training-target.completed {
+  background: rgba(31, 157, 85, 0.12);
+  border-color: rgba(31, 157, 85, 0.4);
+  color: var(--success);
+}
+
+.training-target.active {
+  background: rgba(36, 85, 245, 0.14);
+  border-color: rgba(36, 85, 245, 0.4);
+  color: var(--primary);
+}
+
+.training-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.training-stat:last-child {
+  border-bottom: none;
+}
+
+.training-stat-label {
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.training-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.training-hit-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.training-status-message {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.training-status-message[data-tone="success"] {
+  color: var(--success);
+}
+
+.training-status-message[data-tone="warning"] {
+  color: var(--accent);
+}
+
+.training-status-message[data-tone="danger"] {
+  color: var(--danger);
+}
+
+.training-history {
+  margin-top: 0.75rem;
+}
+
+.training-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.training-history-list li {
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+}
+
+.training-history-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-left: 0.35rem;
+}
+
+.training-history-empty {
+  text-align: center;
+  font-style: italic;
+  border-style: dashed;
+  color: var(--text-muted);
 }
 
 .player-header-content {

@@ -36,10 +36,53 @@ const DART_NUMBER_ORDERS = {
 };
 const DARTBOARD_NUMBERS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 const HOT_NUMBER_BASE_ORDER = DARTBOARD_NUMBERS.slice();
+const CLOCKWISE_AROUND_ORDER = buildBoardAroundOrder(true);
+const COUNTER_AROUND_ORDER = buildBoardAroundOrder(false);
+const NUMERIC_AROUND_ORDER = Array.from({ length: 20 }, (_, index) => index + 1);
 const OUT_MODE_LABELS = {
   double: "Double Out",
   single: "Single Out",
 };
+const AROUND_THE_CLOCK_TARGETS = [
+  ...Array.from({ length: 20 }, (_, index) => index + 1),
+  "SB",
+];
+const TRAINING_VARIANTS = {
+  boardClockwise: {
+    id: "boardClockwise",
+    label: "Rundlauf linksrum",
+    build: () => CLOCKWISE_AROUND_ORDER.slice(),
+  },
+  boardCounter: {
+    id: "boardCounter",
+    label: "Rundlauf rechtsrum",
+    build: () => COUNTER_AROUND_ORDER.slice(),
+  },
+  numeric: {
+    id: "numeric",
+    label: "Numerisch 1-20",
+    build: () => NUMERIC_AROUND_ORDER.slice(),
+  },
+};
+const TRAINING_MODES = {
+  around: {
+    id: "around",
+    label: "Around the Clock",
+  },
+};
+
+function buildBoardAroundOrder(clockwise = true) {
+  const startIndex = DARTBOARD_NUMBERS.indexOf(1);
+  const sequence = [];
+  for (let offset = 0; offset < DARTBOARD_NUMBERS.length; offset += 1) {
+    const index = clockwise
+      ? (startIndex + offset) % DARTBOARD_NUMBERS.length
+      : (startIndex - offset + DARTBOARD_NUMBERS.length) % DARTBOARD_NUMBERS.length;
+    sequence.push(DARTBOARD_NUMBERS[index]);
+  }
+  return sequence;
+}
+
 const PROFILE_STORAGE_KEY = "dartsProfiles";
 const MATCH_MODES = {
   single: {
@@ -90,6 +133,20 @@ const elements = {
   dartNumberGrid: document.getElementById("dart-number-grid"),
   dartNumberOrderButtons: Array.from(document.querySelectorAll(".dart-number-order-btn")),
   template: document.getElementById("scoreboard-item-template"),
+  trainingCard: document.querySelector(".training-card"),
+  trainingVariantSelect: document.getElementById("training-variant"),
+  trainingStartBtn: document.getElementById("training-start"),
+  trainingResetBtn: document.getElementById("training-reset"),
+  trainingHitBtn: document.getElementById("training-hit"),
+  trainingMissBtn: document.getElementById("training-miss"),
+  trainingTargetLabel: document.getElementById("training-target-label"),
+  trainingProgressLabel: document.getElementById("training-progress"),
+  trainingDartsLabel: document.getElementById("training-darts"),
+  trainingDurationLabel: document.getElementById("training-duration"),
+  trainingHistory: document.getElementById("training-history"),
+  trainingStatusMessage: document.getElementById("training-status-message"),
+  trainingTargetGrid: document.getElementById("training-target-grid"),
+  trainingModeLabel: document.getElementById("training-mode-label"),
   startingScoreSelect: document.getElementById("starting-score"),
   outModeSelect: document.getElementById("out-mode"),
   matchModeSelect: document.getElementById("match-mode"),
@@ -246,6 +303,17 @@ const gameState = {
   hotBoardLockedOrder: null,
   hotBoardLockedPlayerId: null,
   lastHotNumberOrder: HOT_NUMBER_BASE_ORDER.slice(),
+  training: {
+    mode: "around",
+    variant: "boardClockwise",
+    active: false,
+    currentIndex: 0,
+    darts: 0,
+    hits: 0,
+    startTime: null,
+    lastDurationMs: 0,
+    history: [],
+  },
   viewMode: "setup",
   layoutMode: "auto",
   theme: "light",
@@ -720,6 +788,25 @@ async function initialize() {
   if (elements.hotNumberGrid) {
     elements.hotNumberGrid.addEventListener("click", onHotNumberGridClick);
   }
+  if (elements.trainingStartBtn) {
+    elements.trainingStartBtn.addEventListener("click", () => startTrainingSession());
+  }
+  if (elements.trainingResetBtn) {
+    elements.trainingResetBtn.addEventListener("click", () => resetTrainingSession());
+  }
+  if (elements.trainingHitBtn) {
+    elements.trainingHitBtn.addEventListener("click", () => handleTrainingHit());
+  }
+  if (elements.trainingMissBtn) {
+    elements.trainingMissBtn.addEventListener("click", () => handleTrainingMiss());
+  }
+  if (elements.trainingVariantSelect) {
+    elements.trainingVariantSelect.addEventListener("change", (event) =>
+      setTrainingVariant(event.target.value)
+    );
+  }
+  setTrainingMessage("Starte das Training, um deine Runde zu tracken.");
+  renderTrainingView();
   restoreLayoutModePreference();
   window.addEventListener("resize", closeMainMenu);
   window.addEventListener("orientationchange", closeMainMenu);
@@ -3241,7 +3328,7 @@ function finalizeGameStats() {
 }
 
 function setViewMode(view) {
-  const allowedViews = ["setup", "play", "tournament", "profiles", "leaderboard"];
+  const allowedViews = ["setup", "play", "training", "tournament", "profiles", "leaderboard"];
   const normalized = allowedViews.includes(view) ? view : "setup";
   if (gameState.viewMode === normalized) {
     updateViewModeUI();
@@ -3253,6 +3340,10 @@ function setViewMode(view) {
   if (normalized === "play") {
     requestAnimationFrame(() => {
       elements.scoreboardCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  } else if (normalized === "training") {
+    requestAnimationFrame(() => {
+      elements.trainingCard?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   } else if (normalized === "profiles") {
     requestAnimationFrame(() => {
@@ -3271,6 +3362,7 @@ function updateViewModeUI() {
   document.body.classList.toggle("tournament-view", currentView === "tournament");
   document.body.classList.toggle("profiles-view", currentView === "profiles");
   document.body.classList.toggle("leaderboard-view", currentView === "leaderboard");
+  document.body.classList.toggle("training-view", currentView === "training");
   elements.viewToggleButtons.forEach((button) => {
     const isActive = button.dataset.view === currentView;
     button.classList.toggle("active", isActive);
@@ -3285,12 +3377,263 @@ function updateViewModeUI() {
   }
   if (currentView === "play") {
     updateActivePlayerBanner();
+  } else if (currentView === "training") {
+    if (elements.trainingCard) {
+      elements.trainingCard.hidden = false;
+    }
+    renderTrainingView();
   } else if (currentView === "tournament") {
     renderTournamentBracket();
   } else if (currentView === "leaderboard") {
     renderLeaderboard();
   }
+  if (elements.trainingCard && currentView !== "training") {
+    elements.trainingCard.hidden = true;
+  }
   closeMainMenu();
+}
+
+function getTrainingModeConfig(mode = gameState.training.mode) {
+  return TRAINING_MODES[mode] || TRAINING_MODES.around;
+}
+
+function getTrainingTargets(mode = gameState.training.mode) {
+  const variantId = gameState.training.variant || "boardClockwise";
+  const variant = TRAINING_VARIANTS[variantId] || TRAINING_VARIANTS.boardClockwise;
+  const base = typeof variant.build === "function" ? variant.build() : AROUND_THE_CLOCK_TARGETS.slice();
+  const targets = base.slice();
+  if (!targets.includes("SB")) {
+    targets.push("SB");
+  }
+  return targets;
+}
+
+function describeTrainingTarget(target, variant = "long") {
+  if (typeof target === "number") {
+    return variant === "short" ? `${target}` : `Zahl ${target}`;
+  }
+  if (target === "SB") {
+    return variant === "short" ? "SB" : "Single Bull";
+  }
+  if (target === "DB") {
+    return variant === "short" ? "DB" : "Double Bull";
+  }
+  return String(target);
+}
+
+function setTrainingMessage(message, tone = "info") {
+  if (!elements.trainingStatusMessage) return;
+  elements.trainingStatusMessage.textContent = message;
+  if (tone && tone !== "info") {
+    elements.trainingStatusMessage.dataset.tone = tone;
+  } else {
+    delete elements.trainingStatusMessage.dataset.tone;
+  }
+}
+
+function setTrainingVariant(variant) {
+  if (!TRAINING_VARIANTS[variant]) return;
+  if (gameState.training.variant === variant) return;
+  gameState.training.variant = variant;
+  resetTrainingSession();
+  setTrainingMessage(`Variante: ${TRAINING_VARIANTS[variant].label} gewählt.`);
+  if (elements.trainingVariantSelect) {
+    elements.trainingVariantSelect.value = variant;
+  }
+  renderTrainingView();
+}
+
+function startTrainingSession(mode = gameState.training.mode) {
+  const config = getTrainingModeConfig(mode);
+  gameState.training.mode = config.id;
+  gameState.training.active = true;
+  gameState.training.currentIndex = 0;
+  gameState.training.darts = 0;
+  gameState.training.hits = 0;
+  gameState.training.startTime = Date.now();
+  gameState.training.lastDurationMs = 0;
+  setTrainingMessage(`Training gestartet: ${config.label}`);
+  renderTrainingView();
+}
+
+function resetTrainingSession() {
+  const wasActive = gameState.training.active;
+  gameState.training.active = false;
+  gameState.training.currentIndex = 0;
+  gameState.training.darts = 0;
+  gameState.training.hits = 0;
+  gameState.training.startTime = null;
+  gameState.training.lastDurationMs = 0;
+  setTrainingMessage(wasActive ? "Training gestoppt." : "Training zurückgesetzt.");
+  renderTrainingView();
+}
+
+function ensureTrainingSessionActive() {
+  if (gameState.training.active) {
+    return true;
+  }
+  setTrainingMessage("Starte zuerst das Training.", "warning");
+  return false;
+}
+
+function handleTrainingMiss() {
+  if (!ensureTrainingSessionActive()) return;
+  gameState.training.darts += 1;
+  setTrainingMessage("Weiter geht's – Ziel noch offen.");
+  renderTrainingView();
+}
+
+function handleTrainingHit() {
+  if (!ensureTrainingSessionActive()) return;
+  const targets = getTrainingTargets();
+  gameState.training.darts += 1;
+  gameState.training.currentIndex = Math.min(
+    gameState.training.currentIndex + 1,
+    targets.length
+  );
+  gameState.training.hits = Math.min(gameState.training.currentIndex, targets.length);
+  if (gameState.training.currentIndex >= targets.length) {
+    completeTrainingSession(targets.length);
+    return;
+  }
+  const nextTarget = targets[gameState.training.currentIndex];
+  setTrainingMessage(`Weiter mit ${describeTrainingTarget(nextTarget)}.`);
+  renderTrainingView();
+}
+
+function completeTrainingSession(totalTargets = getTrainingTargets().length) {
+  const config = getTrainingModeConfig();
+  const durationMs = gameState.training.startTime
+    ? Math.max(0, Date.now() - gameState.training.startTime)
+    : 0;
+  const entry = {
+    id: uid(),
+    mode: config.id,
+    label: config.label,
+    darts: gameState.training.darts,
+    durationMs,
+    finishedAt: Date.now(),
+    targets: totalTargets,
+  };
+  gameState.training.history.unshift(entry);
+  if (gameState.training.history.length > 10) {
+    gameState.training.history.length = 10;
+  }
+  gameState.training.active = false;
+  gameState.training.startTime = null;
+  gameState.training.lastDurationMs = durationMs;
+  gameState.training.currentIndex = totalTargets;
+  gameState.training.hits = totalTargets;
+  setTrainingMessage(
+    `Training abgeschlossen: ${totalTargets} Ziele in ${entry.darts} Darts.`,
+    "success"
+  );
+  renderTrainingView();
+}
+
+function renderTrainingView() {
+  if (!elements.trainingCard) return;
+  const config = getTrainingModeConfig();
+  const targets = getTrainingTargets(config.id);
+  const totalTargets = targets.length;
+  const currentIndex = Math.min(gameState.training.currentIndex, totalTargets);
+  const nextTarget = targets[currentIndex] ?? null;
+  if (elements.trainingVariantSelect) {
+    elements.trainingVariantSelect.value = gameState.training.variant || "boardClockwise";
+  }
+  if (elements.trainingModeLabel) {
+    elements.trainingModeLabel.textContent = config.label;
+  }
+  if (elements.trainingTargetLabel) {
+    elements.trainingTargetLabel.textContent = nextTarget
+      ? describeTrainingTarget(nextTarget)
+      : "Geschafft!";
+  }
+  if (elements.trainingProgressLabel) {
+    const progress = Math.min(gameState.training.hits, totalTargets);
+    elements.trainingProgressLabel.textContent = `${progress} / ${totalTargets}`;
+  }
+  if (elements.trainingDartsLabel) {
+    elements.trainingDartsLabel.textContent = String(gameState.training.darts);
+  }
+  if (elements.trainingDurationLabel) {
+    const duration = gameState.training.active && gameState.training.startTime
+      ? Math.max(0, Date.now() - gameState.training.startTime)
+      : gameState.training.lastDurationMs || 0;
+    elements.trainingDurationLabel.textContent = formatTrainingDuration(duration);
+  }
+  if (elements.trainingStartBtn) {
+    elements.trainingStartBtn.textContent = gameState.training.active
+      ? "Neu starten"
+      : "Training starten";
+  }
+  if (elements.trainingHitBtn) {
+    elements.trainingHitBtn.disabled = !gameState.training.active;
+  }
+  if (elements.trainingMissBtn) {
+    elements.trainingMissBtn.disabled = !gameState.training.active;
+  }
+  if (elements.trainingResetBtn) {
+    const isPristine =
+      !gameState.training.active &&
+      gameState.training.currentIndex === 0 &&
+      gameState.training.darts === 0;
+    elements.trainingResetBtn.disabled = isPristine;
+  }
+  renderTrainingTargetGrid(targets, currentIndex);
+  renderTrainingHistory();
+}
+
+function renderTrainingTargetGrid(targets, currentIndex) {
+  if (!elements.trainingTargetGrid) return;
+  elements.trainingTargetGrid.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  targets.forEach((target, index) => {
+    const node = document.createElement("span");
+    node.className = "training-target";
+    if (index < currentIndex) {
+      node.classList.add("completed");
+    } else if (index === currentIndex) {
+      node.classList.add("active");
+    }
+    node.textContent = describeTrainingTarget(target, "short");
+    fragment.appendChild(node);
+  });
+  elements.trainingTargetGrid.appendChild(fragment);
+}
+
+function renderTrainingHistory() {
+  if (!elements.trainingHistory) return;
+  const history = gameState.training.history || [];
+  if (!history.length) {
+    elements.trainingHistory.innerHTML =
+      '<li class="training-history-empty">Noch keine Trainingseinheit gespeichert.</li>';
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  history.forEach((entry) => {
+    const item = document.createElement("li");
+    const heading = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = entry.label;
+    heading.appendChild(title);
+    const targetMeta = document.createElement("span");
+    targetMeta.className = "training-history-meta";
+    targetMeta.textContent = `${entry.targets} Ziele`;
+    heading.appendChild(targetMeta);
+    const meta = document.createElement("div");
+    meta.className = "training-history-meta";
+    const durationLabel = formatTrainingDuration(entry.durationMs || 0);
+    const dateLabel = formatProfileDate(entry.finishedAt);
+    meta.textContent = `${entry.darts} Darts · ${durationLabel}${
+      dateLabel ? ` · ${dateLabel}` : ""
+    }`;
+    item.appendChild(heading);
+    item.appendChild(meta);
+    fragment.appendChild(item);
+  });
+  elements.trainingHistory.innerHTML = "";
+  elements.trainingHistory.appendChild(fragment);
 }
 
 function initializeTheme() {
@@ -5523,6 +5866,18 @@ function formatPercentage(value, total, decimals = 1) {
   if (!total) return (0).toFixed(decimals) + "%";
   const percentage = (Number(value) / Number(total)) * 100;
   return `${percentage.toFixed(decimals)}%`;
+}
+
+function formatTrainingDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return "00:00";
+  }
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
 
 function formatProfileDate(value) {

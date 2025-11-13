@@ -32,6 +32,7 @@
           <div class="view-toggle" role="group" aria-label="Ansicht wählen">
             <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
             <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+            <button type="button" class="view-toggle-btn" data-view="training">Training</button>
             <button type="button" class="view-toggle-btn" data-view="tournament">Turnier</button>
             <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
             <button type="button" class="view-toggle-btn" data-view="leaderboard">Leaderboard</button>
@@ -438,6 +439,70 @@
         <p class="audio-controls-hint">
           Chase the Sun startet automatisch bei W&uuml;rfen &gt; 60 Punkten, die Gladbach-Hymne bei W&uuml;rfen &gt; 100 und &lt; 180 Punkten und Darts 180 bei exakt 180 Punkten.
         </p>
+      </div>
+    </section>
+
+    <section class="card training-card" aria-labelledby="training-title" hidden>
+      <div class="training-card-header">
+        <div>
+          <h2 id="training-title">Training</h2>
+          <p class="training-description">
+            Around the Clock: Triff die Zahlen 1–20 der Reihe nach und beende mit Single-Bull.
+          </p>
+        </div>
+        <span class="training-mode-pill" id="training-mode-label">Around the Clock</span>
+      </div>
+
+      <div class="training-mode-select">
+        <label for="training-variant">Variante</label>
+        <select id="training-variant">
+          <option value="boardClockwise">Rundlauf linksrum (1 ➜ 20)</option>
+          <option value="boardCounter">Rundlauf rechtsrum (20 ➜ 1)</option>
+          <option value="numeric">Numerisch (1 ➜ 20)</option>
+        </select>
+      </div>
+
+      <div class="training-action-row">
+        <button type="button" id="training-start" class="primary">Training starten</button>
+        <button type="button" id="training-reset" class="ghost">Zurücksetzen</button>
+      </div>
+
+      <div class="training-board">
+        <div class="training-target-panel">
+          <p class="training-panel-label">Nächstes Ziel</p>
+          <p class="training-target-value" id="training-target-label">-</p>
+          <div class="training-target-grid" id="training-target-grid"></div>
+        </div>
+        <div class="training-stats-panel">
+          <div class="training-stat">
+            <span class="training-stat-label">Fortschritt</span>
+            <span class="training-stat-value" id="training-progress">0 / 22</span>
+          </div>
+          <div class="training-stat">
+            <span class="training-stat-label">Darts</span>
+            <span class="training-stat-value" id="training-darts">0</span>
+          </div>
+          <div class="training-stat">
+            <span class="training-stat-label">Zeit</span>
+            <span class="training-stat-value" id="training-duration">00:00</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="training-hit-controls">
+        <button type="button" id="training-hit" class="primary">Treffer</button>
+        <button type="button" id="training-miss" class="ghost">Fehlwurf</button>
+      </div>
+
+      <p class="training-status-message" id="training-status-message">
+        Starte das Training, um deine Runde zu tracken.
+      </p>
+
+      <div class="training-history">
+        <h3>Training-Verlauf</h3>
+        <ul id="training-history" class="training-history-list">
+          <li class="training-history-empty">Noch keine Trainingseinheit gespeichert.</li>
+        </ul>
       </div>
     </section>
 
