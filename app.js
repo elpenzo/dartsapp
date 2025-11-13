@@ -243,6 +243,9 @@ const gameState = {
   dartMultiplier: 1,
   dartNumberOrder: "sequential",
   hotBoardMode: "live",
+  hotBoardLockedOrder: null,
+  hotBoardLockedPlayerId: null,
+  lastHotNumberOrder: HOT_NUMBER_BASE_ORDER.slice(),
   viewMode: "setup",
   layoutMode: "auto",
   theme: "light",
@@ -1005,6 +1008,7 @@ function createPlayerConfig(slot, formData, select, input, options = {}) {
 function createNewTurn() {
   const player = gameState.players[gameState.activeIndex];
   if (!player) return null;
+  clearHotNumberBoardLock();
   return {
     playerId: player.id,
     darts: [],
@@ -1491,6 +1495,7 @@ function applyTurnResult(result) {
   pushHistory(turn, player, legWon);
   player.history.push(turn);
   gameState.currentTurn = null;
+  clearHotNumberBoardLock();
 
   if (legWon) {
     handleLegWin(player);
@@ -1510,6 +1515,7 @@ function finishTurn(bust, legWon) {
   player.history.push(gameState.currentTurn);
   player.lastTurn = bust ? "Bust" : summarizeTurn(gameState.currentTurn);
   gameState.currentTurn = null;
+  clearHotNumberBoardLock();
 }
 
 function pushHistory(turn, player, legWon = false) {
@@ -1588,6 +1594,13 @@ function recordSnapshot() {
     legStarterIndex: gameState.legStarterIndex,
     lastLegWinnerId: gameState.lastLegWinnerId,
     matchCompleted: gameState.matchCompleted,
+    hotBoardLockedOrder: gameState.hotBoardLockedOrder
+      ? [...gameState.hotBoardLockedOrder]
+      : null,
+    hotBoardLockedPlayerId: gameState.hotBoardLockedPlayerId || null,
+    lastHotNumberOrder: gameState.lastHotNumberOrder
+      ? [...gameState.lastHotNumberOrder]
+      : null,
   };
   gameState.snapshots.push(snapshot);
   if (gameState.snapshots.length > 20) {
@@ -1636,6 +1649,14 @@ function undoLastTurn() {
   });
   gameState.history = lastSnapshot.history;
   gameState.currentTurn = lastSnapshot.currentTurn;
+  gameState.hotBoardLockedOrder = lastSnapshot.hotBoardLockedOrder
+    ? [...lastSnapshot.hotBoardLockedOrder]
+    : null;
+  gameState.hotBoardLockedPlayerId = lastSnapshot.hotBoardLockedPlayerId || null;
+  gameState.lastHotNumberOrder =
+    lastSnapshot.lastHotNumberOrder && lastSnapshot.lastHotNumberOrder.length
+      ? [...lastSnapshot.lastHotNumberOrder]
+      : HOT_NUMBER_BASE_ORDER.slice();
   render();
   notifyVoiceStatus("offline", "Letzter Schritt zurückgenommen");
 }
@@ -1959,6 +1980,20 @@ function renderScoreboardInsights() {
   container.appendChild(fragment);
 }
 
+function lockHotNumberBoard(playerId) {
+  const source =
+    Array.isArray(gameState.lastHotNumberOrder) && gameState.lastHotNumberOrder.length
+      ? gameState.lastHotNumberOrder
+      : HOT_NUMBER_BASE_ORDER;
+  gameState.hotBoardLockedOrder = source.slice();
+  gameState.hotBoardLockedPlayerId = playerId || null;
+}
+
+function clearHotNumberBoardLock() {
+  gameState.hotBoardLockedOrder = null;
+  gameState.hotBoardLockedPlayerId = null;
+}
+
 function renderHotNumberBoard() {
   const grid = elements.hotNumberGrid;
   if (!grid) return;
@@ -2011,7 +2046,29 @@ function renderHotNumberBoard() {
   }
 
   grid.innerHTML = "";
-  const orderedNumbers = boardData.order.length ? boardData.order : HOT_NUMBER_BASE_ORDER.slice();
+  const isTurnLocked =
+    gameState.currentTurn &&
+    gameState.currentTurn.playerId === activePlayer.id &&
+    Array.isArray(gameState.currentTurn.darts) &&
+    gameState.currentTurn.darts.length > 0;
+
+  if (isTurnLocked) {
+    if (
+      !gameState.hotBoardLockedOrder ||
+      gameState.hotBoardLockedPlayerId !== activePlayer.id
+    ) {
+      lockHotNumberBoard(activePlayer.id);
+    }
+  } else if (gameState.hotBoardLockedPlayerId === activePlayer.id) {
+    clearHotNumberBoardLock();
+  }
+
+  const orderedNumbers =
+    gameState.hotBoardLockedOrder && gameState.hotBoardLockedPlayerId === activePlayer.id
+      ? gameState.hotBoardLockedOrder.slice()
+      : boardData.order.length
+        ? boardData.order.slice()
+        : HOT_NUMBER_BASE_ORDER.slice();
   const multiplierConfig = MULTIPLIER_CONFIG[currentMultiplier] || MULTIPLIER_CONFIG[1];
 
   orderedNumbers.slice(0, 10).forEach((value) => {
@@ -2026,6 +2083,7 @@ function renderHotNumberBoard() {
 
   elements.hotBoardButtons = Array.from(grid.querySelectorAll(".hot-number-button"));
   setupDartSwipeGestures(elements.hotBoardButtons);
+  gameState.lastHotNumberOrder = orderedNumbers.slice();
 }
 
 function computeHotNumberBoardData(summary, multiplier) {
