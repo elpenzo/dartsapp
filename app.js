@@ -1730,11 +1730,13 @@ function renderScoreboard() {
     const avatarImage = fragment.querySelector(".player-avatar");
     const avatarFallback = fragment.querySelector(".player-avatar-fallback");
     const scoreNode = fragment.querySelector(".player-score");
+    const threeDartNode = fragment.querySelector(".player-three-dart");
     const lastNode = fragment.querySelector(".player-last");
     const setsNode = fragment.querySelector(".player-sets");
     const legsNode = fragment.querySelector(".player-legs");
     const checkoutNode = fragment.querySelector(".player-checkout");
     const checkoutWrapper = fragment.querySelector(".player-checkout-wrapper");
+    const heatmapOverlay = fragment.querySelector(".player-card-heatmap");
 
     const displayName = getPlayerDisplayName(player);
     nameNode.textContent = displayName;
@@ -1763,6 +1765,22 @@ function renderScoreboard() {
 
     scoreNode.textContent = player.score;
     lastNode.textContent = player.lastTurn || "-";
+    if (threeDartNode) {
+      const dartsThrown = Number(player.totalDartsThisGame) || 0;
+      const pointsScored = Number(player.totalPointsThisGame) || 0;
+      const averageValue = dartsThrown > 0 ? pointsScored / dartsThrown : 0;
+      threeDartNode.textContent = dartsThrown > 0 ? (averageValue * 3).toFixed(2) : "0.00";
+    }
+    if (heatmapOverlay) {
+      const { svgMarkup } = generateHeatmapSvgMarkup(player.dartHitsThisGame);
+      if (svgMarkup) {
+        heatmapOverlay.innerHTML = svgMarkup;
+        heatmapOverlay.hidden = false;
+      } else {
+        heatmapOverlay.innerHTML = "";
+        heatmapOverlay.hidden = true;
+      }
+    }
     if (setsNode) {
       setsNode.textContent = String(player.setsWon || 0);
     }
@@ -5305,12 +5323,15 @@ function ringPath(innerRadius, outerRadius, startAngle, endAngle, center) {
   return `M ${outerStart} A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${outerEnd} L ${innerEnd} A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerStart} Z`;
 }
 
-function generateProfileHeatmapMarkup(profile) {
-  const histogram = profile?.stats?.dartHistogram;
-  if (!histogram) return "";
+function generateHeatmapSvgMarkup(histogram) {
+  if (!histogram) {
+    return { svgMarkup: "", totalHits: 0 };
+  }
 
   const data = aggregateHistogramData(histogram);
-  if (!data.totalHits) return "";
+  if (!data.totalHits) {
+    return { svgMarkup: "", totalHits: 0 };
+  }
 
   const center = 120;
   const segmentAngle = (Math.PI * 2) / DARTBOARD_NUMBER_ORDER.length;
@@ -5371,13 +5392,21 @@ function generateProfileHeatmapMarkup(profile) {
     </svg>
   `;
 
+  return { svgMarkup, totalHits: data.totalHits };
+}
+
+function generateProfileHeatmapMarkup(profile) {
+  const histogram = profile?.stats?.dartHistogram;
+  const { svgMarkup, totalHits } = generateHeatmapSvgMarkup(histogram);
+  if (!svgMarkup) return "";
+
   const legendMarkup = `
     <div class="heatmap-legend">
       <span class="heatmap-legend-item"><span class="heatmap-swatch singles"></span>Singles</span>
       <span class="heatmap-legend-item"><span class="heatmap-swatch doubles"></span>Doubles</span>
       <span class="heatmap-legend-item"><span class="heatmap-swatch triples"></span>Triples</span>
       <span class="heatmap-legend-item"><span class="heatmap-swatch bulls"></span>Bull</span>
-      <span class="heatmap-legend-item total">Treffer insgesamt: ${data.totalHits}</span>
+      <span class="heatmap-legend-item total">Treffer insgesamt: ${totalHits}</span>
     </div>
   `;
 

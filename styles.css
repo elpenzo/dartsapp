@@ -1431,6 +1431,34 @@ button.ghost {
   gap: 0.5rem;
 }
 
+.player-card-heatmap {
+  flex: 0 0 auto;
+  width: 110px;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  pointer-events: none;
+}
+
+.player-card-heatmap svg {
+  width: 110px;
+  height: 110px;
+}
+
+.player-card-heatmap .board-outline {
+  stroke: rgba(36, 85, 245, 0.35);
+}
+
+.player-header-content {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .player-header {
   display: flex;
   align-items: center;
