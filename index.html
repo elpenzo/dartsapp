@@ -476,43 +476,128 @@
         <button type="button" id="training-reset" class="ghost">Zurücksetzen</button>
       </div>
 
-      <div class="training-board">
-        <div class="training-target-panel">
-          <p class="training-panel-label">Nächstes Ziel</p>
-          <p class="training-target-value" id="training-target-label">-</p>
-          <p class="training-target-meta" id="training-target-meta"></p>
-          <div class="training-target-grid" id="training-target-grid"></div>
-        </div>
-        <div class="training-stats-panel">
-          <div class="training-stat">
-            <span class="training-stat-label" id="training-progress-title">Fortschritt</span>
-            <span class="training-stat-value" id="training-progress">0 / 22</span>
-          </div>
-          <div class="training-stat">
-            <span class="training-stat-label">Darts</span>
-            <span class="training-stat-value" id="training-darts">0</span>
-          </div>
-          <div class="training-stat">
-            <span class="training-stat-label">Zeit</span>
-            <span class="training-stat-value" id="training-duration">00:00</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="training-hit-controls">
-        <button type="button" id="training-hit" class="primary">Treffer</button>
-        <button type="button" id="training-miss" class="ghost">Fehlwurf</button>
-      </div>
-
       <p class="training-status-message" id="training-status-message">
         Starte das Training, um deine Runde zu tracken.
       </p>
 
-      <div class="training-history">
-        <h3>Training-Verlauf</h3>
-        <ul id="training-history" class="training-history-list">
-          <li class="training-history-empty">Noch keine Trainingseinheit gespeichert.</li>
-        </ul>
+      <div class="training-players" id="training-players">
+        <article class="training-player" data-training-slot="0">
+          <header class="training-player-header">
+            <h3 class="training-player-title" data-role="player-title">Spieler A</h3>
+            <div class="training-player-config">
+              <div class="form-row">
+                <label for="training-player-1-profile">Profil</label>
+                <select id="training-player-1-profile" class="training-player-profile">
+                  <option value="">Benutzerdefiniert</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="training-player-1-name">Name</label>
+                <input
+                  id="training-player-1-name"
+                  class="training-player-name"
+                  type="text"
+                  value="Spieler A"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+          </header>
+
+          <div class="training-player-board">
+            <div class="training-target-panel">
+              <p class="training-panel-label">Nächstes Ziel</p>
+              <p class="training-target-value" data-role="target-label">-</p>
+              <p class="training-target-meta" data-role="target-meta"></p>
+              <div class="training-target-grid" data-role="target-grid"></div>
+            </div>
+            <div class="training-stats-panel">
+              <div class="training-stat">
+                <span class="training-stat-label training-progress-title" data-role="progress-title">Fortschritt</span>
+                <span class="training-stat-value training-progress" data-role="progress-label">0 / 22</span>
+              </div>
+              <div class="training-stat">
+                <span class="training-stat-label">Darts</span>
+                <span class="training-stat-value" data-role="darts-label">0</span>
+              </div>
+              <div class="training-stat">
+                <span class="training-stat-label">Zeit</span>
+                <span class="training-stat-value" data-role="duration-label">00:00</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="training-hit-controls">
+            <button type="button" class="primary training-hit-btn" data-training-slot="0">Treffer</button>
+            <button type="button" class="ghost training-miss-btn" data-training-slot="0">Fehlwurf</button>
+          </div>
+
+          <div class="training-player-history">
+            <h4>Verlauf</h4>
+            <ul class="training-history-list" data-role="history">
+              <li class="training-history-empty">Noch keine Trainingseinheit gespeichert.</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="training-player" data-training-slot="1">
+          <header class="training-player-header">
+            <h3 class="training-player-title" data-role="player-title">Spieler B</h3>
+            <div class="training-player-config">
+              <div class="form-row">
+                <label for="training-player-2-profile">Profil</label>
+                <select id="training-player-2-profile" class="training-player-profile">
+                  <option value="">Benutzerdefiniert</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="training-player-2-name">Name</label>
+                <input
+                  id="training-player-2-name"
+                  class="training-player-name"
+                  type="text"
+                  value="Spieler B"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+          </header>
+
+          <div class="training-player-board">
+            <div class="training-target-panel">
+              <p class="training-panel-label">Nächstes Ziel</p>
+              <p class="training-target-value" data-role="target-label">-</p>
+              <p class="training-target-meta" data-role="target-meta"></p>
+              <div class="training-target-grid" data-role="target-grid"></div>
+            </div>
+            <div class="training-stats-panel">
+              <div class="training-stat">
+                <span class="training-stat-label training-progress-title" data-role="progress-title">Fortschritt</span>
+                <span class="training-stat-value training-progress" data-role="progress-label">0 / 22</span>
+              </div>
+              <div class="training-stat">
+                <span class="training-stat-label">Darts</span>
+                <span class="training-stat-value" data-role="darts-label">0</span>
+              </div>
+              <div class="training-stat">
+                <span class="training-stat-label">Zeit</span>
+                <span class="training-stat-value" data-role="duration-label">00:00</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="training-hit-controls">
+            <button type="button" class="primary training-hit-btn" data-training-slot="1">Treffer</button>
+            <button type="button" class="ghost training-miss-btn" data-training-slot="1">Fehlwurf</button>
+          </div>
+
+          <div class="training-player-history">
+            <h4>Verlauf</h4>
+            <ul class="training-history-list" data-role="history">
+              <li class="training-history-empty">Noch keine Trainingseinheit gespeichert.</li>
+            </ul>
+          </div>
+        </article>
       </div>
     </section>
 

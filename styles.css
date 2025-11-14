@@ -1544,14 +1544,52 @@ button.ghost {
   gap: 0.75rem;
 }
 
-.training-board {
+.training-players {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.training-player {
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.training-player-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.training-player-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.training-player-config {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.training-player-config .form-row {
+  margin: 0;
+}
+
+.training-player-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 1rem;
 }
 
 @media (max-width: 900px) {
-  .training-board {
+  .training-player-board {
     grid-template-columns: 1fr;
   }
 }
@@ -1669,7 +1707,8 @@ button.ghost {
   color: var(--danger);
 }
 
-.training-history {
+.training-history,
+.training-player-history {
   margin-top: 0.75rem;
 }
 
