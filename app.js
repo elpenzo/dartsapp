@@ -442,9 +442,7 @@ function celebrateBigScore(total) {
   if (!Number.isFinite(total)) {
     return;
   }
-  if (total === 180) {
-    playDartsAudio();
-  } else if (total > 100 && total < 180) {
+  if (total >= 100) {
     playAnthemAudio();
   } else if (total > 60) {
     playChaseAudio();
