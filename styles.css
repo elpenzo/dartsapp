@@ -1527,6 +1527,17 @@ button.ghost {
   color: var(--text);
 }
 
+.training-mode-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.training-mode-controls .training-mode-select {
+  flex: 1 1 220px;
+}
+
 .training-action-row {
   display: flex;
   flex-wrap: wrap;
@@ -1572,6 +1583,12 @@ button.ghost {
   margin: 0;
   font-size: clamp(2rem, 4vw, 3rem);
   font-weight: 700;
+}
+
+.training-target-meta {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .training-target-grid {

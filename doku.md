@@ -38,6 +38,13 @@
   - Sequenzen mit „und/plus“ oder Kommata: „Triple zwanzig und Double 16“.
 - Interpretation basiert auf Web Speech API (Chrome/Edge); bei Browsern ohne Support liefert die Voice-Konsole Hinweise und Nutzer:innen greifen auf manuelle Buttons zurück.
 
+### Training
+- Umschaltbare Modi direkt in der Training-Karte: „Around the Clock“ (1–20 + Single Bull) und neu „121 Game“.
+- Around the Clock: Variante wählen (Dartboard-Reihenfolge oder numerisch), mit „Treffer“ markierst du jede Zahl; „Fehlwurf“ zählt Darts weiter. Nach 22 Treffern wird der Run automatisch gespeichert.
+- 121 Game: Checkout-Challenge – starte bei 121 Punkten und hast 9 Darts pro Versuch. „Checkout geschafft“ markiert einen Erfolg (nächstes Ziel +1, Bestwert aktualisiert), „Fehlwurf“ zählt nur den Dart. Sind 9 Darts verbraucht, wird das Ziel automatisch um 10 Punkte gesenkt (niemals unter 121) und ein Versuch verbucht.
+- Reset während eines aktiven 121-Trainings speichert die Session im Verlauf (Bestes Ziel, Anzahl Checkouts/Versuche, Gesamtdarts, Dauer). Around-the-Clock-Runs landen weiterhin automatisch nach erfolgreichem Durchlauf im Verlauf.
+- Die Statusleiste zeigt je Modus passende Kennzahlen (Serie bzw. bestes Ziel, verbleibende Darts, Gesamtdarts, Zeit) und das Zielpanel blendet Meta-Infos wie Restdarts und Bestwert ein.
+
 ### Turnier & Leaderboard
 - Turnierkarte verwaltet bis zu 16 Spieler:innen samt Profilzuordnung, erzeugt KO-Baum (Achtel- bis Finale) und aktualisiert Status nach jedem Ergebnis.
 - Leaderboard-Karte sortiert Spielerprofile nach Average, Legs/Sets oder Checkout-Quote und greift dabei auf gespeicherte Statistiken zurück.
@@ -66,4 +73,3 @@
 - Web Speech API benötigt HTTPS bzw. `localhost` und Nutzerfreigabe für das Mikrofon. Falls Recognition fehlschlägt, zeigt die Voice-Konsole Status (Info/Error) und empfiehlt manuellen Input.
 - Die App ist offline-first: Netzwerkverlust beeinträchtigt nur das Synchronisieren der Profile; laufende Legs, Turnierbäume und Leaderboards bleiben im Speicher.
 - Bei Konflikten zwischen Browser-Cache und Serverdaten einfach im Profilmanager „Neu laden“ bzw. `localStorage` löschen (`Application → Local Storage → dartsProfiles`).
-

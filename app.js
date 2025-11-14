@@ -47,6 +47,9 @@ const AROUND_THE_CLOCK_TARGETS = [
   ...Array.from({ length: 20 }, (_, index) => index + 1),
   "SB",
 ];
+const TRAINING_121_BASE_TARGET = 121;
+const TRAINING_121_MAX_DARTS = 9;
+const TRAINING_121_PENALTY = 10;
 const TRAINING_VARIANTS = {
   boardClockwise: {
     id: "boardClockwise",
@@ -68,6 +71,16 @@ const TRAINING_MODES = {
   around: {
     id: "around",
     label: "Around the Clock",
+    description:
+      "Triff jede Zahl von 1 bis 20 und beende mit Single Bull.",
+    supportsVariants: true,
+  },
+  game121: {
+    id: "game121",
+    label: "121 Game",
+    description:
+      "Checkout-Challenge: Starte bei 121 Punkten, erledige das Leg in bis zu 9 Darts. Erfolg erhöht das Ziel, ein Fehlschlag zieht 10 Punkte ab.",
+    supportsVariants: false,
   },
 };
 
@@ -134,12 +147,15 @@ const elements = {
   dartNumberOrderButtons: Array.from(document.querySelectorAll(".dart-number-order-btn")),
   template: document.getElementById("scoreboard-item-template"),
   trainingCard: document.querySelector(".training-card"),
+  trainingModeSelect: document.getElementById("training-mode"),
   trainingVariantSelect: document.getElementById("training-variant"),
+  trainingVariantField: document.getElementById("training-variant-field"),
   trainingStartBtn: document.getElementById("training-start"),
   trainingResetBtn: document.getElementById("training-reset"),
   trainingHitBtn: document.getElementById("training-hit"),
   trainingMissBtn: document.getElementById("training-miss"),
   trainingTargetLabel: document.getElementById("training-target-label"),
+  trainingTargetMeta: document.getElementById("training-target-meta"),
   trainingProgressLabel: document.getElementById("training-progress"),
   trainingDartsLabel: document.getElementById("training-darts"),
   trainingDurationLabel: document.getElementById("training-duration"),
@@ -147,6 +163,8 @@ const elements = {
   trainingStatusMessage: document.getElementById("training-status-message"),
   trainingTargetGrid: document.getElementById("training-target-grid"),
   trainingModeLabel: document.getElementById("training-mode-label"),
+  trainingDescription: document.getElementById("training-description"),
+  trainingProgressTitle: document.getElementById("training-progress-title"),
   startingScoreSelect: document.getElementById("starting-score"),
   outModeSelect: document.getElementById("out-mode"),
   matchModeSelect: document.getElementById("match-mode"),
@@ -310,6 +328,11 @@ const gameState = {
     currentIndex: 0,
     darts: 0,
     hits: 0,
+    currentTarget: TRAINING_121_BASE_TARGET,
+    bestTarget: TRAINING_121_BASE_TARGET,
+    attemptDarts: 0,
+    attempts: 0,
+    successes: 0,
     startTime: null,
     lastDurationMs: 0,
     history: [],
@@ -799,6 +822,11 @@ async function initialize() {
   }
   if (elements.trainingMissBtn) {
     elements.trainingMissBtn.addEventListener("click", () => handleTrainingMiss());
+  }
+  if (elements.trainingModeSelect) {
+    elements.trainingModeSelect.addEventListener("change", (event) =>
+      setTrainingMode(event.target.value)
+    );
   }
   if (elements.trainingVariantSelect) {
     elements.trainingVariantSelect.addEventListener("change", (event) =>
@@ -3431,7 +3459,24 @@ function setTrainingMessage(message, tone = "info") {
   }
 }
 
+function setTrainingMode(mode) {
+  const config = TRAINING_MODES[mode];
+  if (!config) return;
+  if (gameState.training.mode === config.id) {
+    if (elements.trainingModeSelect) {
+      elements.trainingModeSelect.value = config.id;
+    }
+    return;
+  }
+  gameState.training.mode = config.id;
+  resetTrainingSession({ silent: true, skipHistory: true });
+  setTrainingMessage(`${config.label} bereit. Klicke auf Training starten.`);
+  renderTrainingView();
+}
+
 function setTrainingVariant(variant) {
+  const config = getTrainingModeConfig();
+  if (!config.supportsVariants) return;
   if (!TRAINING_VARIANTS[variant]) return;
   if (gameState.training.variant === variant) return;
   gameState.training.variant = variant;
@@ -3443,28 +3488,45 @@ function setTrainingVariant(variant) {
   renderTrainingView();
 }
 
-function startTrainingSession(mode = gameState.training.mode) {
-  const config = getTrainingModeConfig(mode);
-  gameState.training.mode = config.id;
-  gameState.training.active = true;
+function resetTrainingCountersForMode(mode = gameState.training.mode) {
   gameState.training.currentIndex = 0;
   gameState.training.darts = 0;
   gameState.training.hits = 0;
+  gameState.training.attemptDarts = 0;
+  gameState.training.attempts = 0;
+  gameState.training.successes = 0;
+  if (mode === TRAINING_MODES.game121.id) {
+    gameState.training.currentTarget = TRAINING_121_BASE_TARGET;
+    gameState.training.bestTarget = TRAINING_121_BASE_TARGET;
+  }
+}
+
+function startTrainingSession(mode = gameState.training.mode) {
+  const config = getTrainingModeConfig(mode);
+  gameState.training.mode = config.id;
+  resetTrainingCountersForMode(config.id);
+  gameState.training.active = true;
   gameState.training.startTime = Date.now();
   gameState.training.lastDurationMs = 0;
   setTrainingMessage(`Training gestartet: ${config.label}`);
   renderTrainingView();
 }
 
-function resetTrainingSession() {
+function resetTrainingSession(options = {}) {
+  const { silent = false, skipHistory = false } = options;
   const wasActive = gameState.training.active;
+  const config = getTrainingModeConfig();
+  if (wasActive && config.id === TRAINING_MODES.game121.id && !skipHistory) {
+    finalize121Session();
+  } else {
+    gameState.training.lastDurationMs = 0;
+  }
   gameState.training.active = false;
-  gameState.training.currentIndex = 0;
-  gameState.training.darts = 0;
-  gameState.training.hits = 0;
   gameState.training.startTime = null;
-  gameState.training.lastDurationMs = 0;
-  setTrainingMessage(wasActive ? "Training gestoppt." : "Training zurückgesetzt.");
+  resetTrainingCountersForMode(config.id);
+  if (!silent) {
+    setTrainingMessage(wasActive ? "Training gestoppt." : "Training zurückgesetzt.");
+  }
   renderTrainingView();
 }
 
@@ -3478,13 +3540,21 @@ function ensureTrainingSessionActive() {
 
 function handleTrainingMiss() {
   if (!ensureTrainingSessionActive()) return;
+  if (getTrainingModeConfig().id === TRAINING_MODES.game121.id) {
+    handle121Miss();
+    return;
+  }
   gameState.training.darts += 1;
-  setTrainingMessage("Weiter geht's – Ziel noch offen.");
+  setTrainingMessage("Weiter geht's - Ziel noch offen.");
   renderTrainingView();
 }
 
 function handleTrainingHit() {
   if (!ensureTrainingSessionActive()) return;
+  if (getTrainingModeConfig().id === TRAINING_MODES.game121.id) {
+    handle121Hit();
+    return;
+  }
   const targets = getTrainingTargets();
   gameState.training.darts += 1;
   gameState.training.currentIndex = Math.min(
@@ -3501,6 +3571,88 @@ function handleTrainingHit() {
   renderTrainingView();
 }
 
+function handle121Miss() {
+  gameState.training.darts += 1;
+  gameState.training.attemptDarts += 1;
+  const remaining = Math.max(
+    0,
+    TRAINING_121_MAX_DARTS - gameState.training.attemptDarts
+  );
+  if (remaining <= 0) {
+    register121Failure();
+  } else {
+    setTrainingMessage(
+      `Noch ${remaining} Darts für ${gameState.training.currentTarget}.`
+    );
+  }
+  renderTrainingView();
+}
+
+function handle121Hit() {
+  gameState.training.darts += 1;
+  gameState.training.attemptDarts += 1;
+  gameState.training.attempts += 1;
+  gameState.training.successes += 1;
+  const finishedTarget = gameState.training.currentTarget;
+  gameState.training.bestTarget = Math.max(
+    gameState.training.bestTarget,
+    finishedTarget
+  );
+  const dartsUsed = gameState.training.attemptDarts;
+  gameState.training.currentTarget = finishedTarget + 1;
+  gameState.training.attemptDarts = 0;
+  setTrainingMessage(
+    `Checkout ${finishedTarget} geschafft in ${dartsUsed} Darts!`,
+    "success"
+  );
+  renderTrainingView();
+}
+
+function register121Failure() {
+  const failedTarget = gameState.training.currentTarget;
+  gameState.training.attempts += 1;
+  gameState.training.attemptDarts = 0;
+  const nextTarget = Math.max(
+    TRAINING_121_BASE_TARGET,
+    failedTarget - TRAINING_121_PENALTY
+  );
+  gameState.training.currentTarget = nextTarget;
+  setTrainingMessage(
+    `Checkout ${failedTarget} verpasst - weiter mit ${nextTarget}.`,
+    "warning"
+  );
+}
+
+function finalize121Session() {
+  if (!gameState.training.darts && !gameState.training.successes) {
+    gameState.training.lastDurationMs = 0;
+    return;
+  }
+  const durationMs = gameState.training.startTime
+    ? Math.max(0, Date.now() - gameState.training.startTime)
+    : gameState.training.lastDurationMs || 0;
+  const entry = {
+    id: uid(),
+    mode: TRAINING_MODES.game121.id,
+    label: TRAINING_MODES.game121.label,
+    darts: gameState.training.darts,
+    durationMs,
+    finishedAt: Date.now(),
+    targets: gameState.training.bestTarget,
+    meta: {
+      bestTarget: gameState.training.bestTarget,
+      currentTarget: gameState.training.currentTarget,
+      attempts: gameState.training.attempts,
+      successes: gameState.training.successes,
+    },
+  };
+  gameState.training.history.unshift(entry);
+  if (gameState.training.history.length > 10) {
+    gameState.training.history.length = 10;
+  }
+  gameState.training.lastDurationMs = durationMs;
+}
+
 function completeTrainingSession(totalTargets = getTrainingTargets().length) {
   const config = getTrainingModeConfig();
   const durationMs = gameState.training.startTime
@@ -3514,6 +3666,9 @@ function completeTrainingSession(totalTargets = getTrainingTargets().length) {
     durationMs,
     finishedAt: Date.now(),
     targets: totalTargets,
+    meta: {
+      variant: TRAINING_VARIANTS[gameState.training.variant]?.label || null,
+    },
   };
   gameState.training.history.unshift(entry);
   if (gameState.training.history.length > 10) {
@@ -3534,24 +3689,64 @@ function completeTrainingSession(totalTargets = getTrainingTargets().length) {
 function renderTrainingView() {
   if (!elements.trainingCard) return;
   const config = getTrainingModeConfig();
-  const targets = getTrainingTargets(config.id);
-  const totalTargets = targets.length;
-  const currentIndex = Math.min(gameState.training.currentIndex, totalTargets);
-  const nextTarget = targets[currentIndex] ?? null;
-  if (elements.trainingVariantSelect) {
-    elements.trainingVariantSelect.value = gameState.training.variant || "boardClockwise";
+  const is121Mode = config.id === TRAINING_MODES.game121.id;
+  let targets = [];
+  let totalTargets = 0;
+  let currentIndex = 0;
+  let nextTarget = null;
+  if (!is121Mode) {
+    targets = getTrainingTargets(config.id);
+    totalTargets = targets.length;
+    currentIndex = Math.min(gameState.training.currentIndex, totalTargets);
+    nextTarget = targets[currentIndex] ?? null;
+  }
+  if (elements.trainingDescription) {
+    elements.trainingDescription.textContent = config.description || "";
   }
   if (elements.trainingModeLabel) {
     elements.trainingModeLabel.textContent = config.label;
   }
+  if (elements.trainingModeSelect) {
+    elements.trainingModeSelect.value = config.id;
+  }
+  if (elements.trainingVariantField) {
+    elements.trainingVariantField.hidden = !config.supportsVariants;
+  }
+  if (elements.trainingVariantSelect) {
+    elements.trainingVariantSelect.value = gameState.training.variant || "boardClockwise";
+    elements.trainingVariantSelect.disabled = !config.supportsVariants;
+  }
   if (elements.trainingTargetLabel) {
-    elements.trainingTargetLabel.textContent = nextTarget
+    elements.trainingTargetLabel.textContent = is121Mode
+      ? String(gameState.training.currentTarget)
+      : nextTarget
       ? describeTrainingTarget(nextTarget)
       : "Geschafft!";
   }
+  if (elements.trainingTargetMeta) {
+    if (is121Mode) {
+      const remaining = Math.max(
+        0,
+        TRAINING_121_MAX_DARTS - gameState.training.attemptDarts
+      );
+      elements.trainingTargetMeta.textContent = `Noch ${remaining} Darts · Bestes Ziel ${gameState.training.bestTarget}`;
+    } else if (totalTargets) {
+      const progress = Math.min(gameState.training.hits, totalTargets);
+      elements.trainingTargetMeta.textContent = nextTarget
+        ? `Serie ${progress} / ${totalTargets}`
+        : `Alle ${totalTargets} Ziele getroffen`;
+    } else {
+      elements.trainingTargetMeta.textContent = "";
+    }
+  }
+  if (elements.trainingProgressTitle) {
+    elements.trainingProgressTitle.textContent = is121Mode ? "Bestes Ziel" : "Fortschritt";
+  }
   if (elements.trainingProgressLabel) {
     const progress = Math.min(gameState.training.hits, totalTargets);
-    elements.trainingProgressLabel.textContent = `${progress} / ${totalTargets}`;
+    elements.trainingProgressLabel.textContent = is121Mode
+      ? `${gameState.training.bestTarget}`
+      : `${progress} / ${totalTargets}`;
   }
   if (elements.trainingDartsLabel) {
     elements.trainingDartsLabel.textContent = String(gameState.training.darts);
@@ -3569,18 +3764,31 @@ function renderTrainingView() {
   }
   if (elements.trainingHitBtn) {
     elements.trainingHitBtn.disabled = !gameState.training.active;
+    elements.trainingHitBtn.textContent = is121Mode
+      ? "Checkout geschafft"
+      : "Treffer";
   }
   if (elements.trainingMissBtn) {
     elements.trainingMissBtn.disabled = !gameState.training.active;
+    elements.trainingMissBtn.textContent = is121Mode ? "Fehlwurf" : "Fehlwurf";
   }
   if (elements.trainingResetBtn) {
     const isPristine =
       !gameState.training.active &&
+      gameState.training.darts === 0 &&
       gameState.training.currentIndex === 0 &&
-      gameState.training.darts === 0;
+      gameState.training.successes === 0;
     elements.trainingResetBtn.disabled = isPristine;
   }
-  renderTrainingTargetGrid(targets, currentIndex);
+  if (elements.trainingTargetGrid) {
+    if (is121Mode) {
+      elements.trainingTargetGrid.hidden = true;
+      elements.trainingTargetGrid.innerHTML = "";
+    } else {
+      elements.trainingTargetGrid.hidden = false;
+      renderTrainingTargetGrid(targets, currentIndex);
+    }
+  }
   renderTrainingHistory();
 }
 
@@ -3619,15 +3827,31 @@ function renderTrainingHistory() {
     heading.appendChild(title);
     const targetMeta = document.createElement("span");
     targetMeta.className = "training-history-meta";
-    targetMeta.textContent = `${entry.targets} Ziele`;
+    if (entry.mode === TRAINING_MODES.game121.id) {
+      const best = entry.meta?.bestTarget ?? entry.targets;
+      targetMeta.textContent = `Bestes Ziel ${best}`;
+    } else {
+      const variantLabel = entry.meta?.variant ? ` · ${entry.meta.variant}` : "";
+      targetMeta.textContent = `${entry.targets} Ziele${variantLabel}`;
+    }
     heading.appendChild(targetMeta);
     const meta = document.createElement("div");
     meta.className = "training-history-meta";
     const durationLabel = formatTrainingDuration(entry.durationMs || 0);
     const dateLabel = formatProfileDate(entry.finishedAt);
-    meta.textContent = `${entry.darts} Darts · ${durationLabel}${
-      dateLabel ? ` · ${dateLabel}` : ""
-    }`;
+    const metaParts = [];
+    if (entry.mode === TRAINING_MODES.game121.id) {
+      const successes = entry.meta?.successes ?? 0;
+      const attempts = entry.meta?.attempts ?? 0;
+      metaParts.push(`${successes} Checkouts`);
+      metaParts.push(`${attempts} Versuche`);
+    }
+    metaParts.push(`${entry.darts} Darts`);
+    metaParts.push(durationLabel);
+    if (dateLabel) {
+      metaParts.push(dateLabel);
+    }
+    meta.textContent = metaParts.join(" · ");
     item.appendChild(heading);
     item.appendChild(meta);
     fragment.appendChild(item);
