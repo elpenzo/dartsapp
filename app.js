@@ -83,6 +83,7 @@ const TRAINING_MODES = {
     supportsVariants: false,
   },
 };
+const LEG_WIN_AUDIO_TRACKS_URL = "data/leg-win-tracks.json";
 
 function buildBoardAroundOrder(clockwise = true) {
   const startIndex = DARTBOARD_NUMBERS.indexOf(1);
@@ -369,6 +370,9 @@ let serverSyncDisabled = false;
 let profileStorageInfo = null;
 let suppressProfileStorageChange = false;
 const audioPlaybackErrors = new Set();
+let legWinAudioClips = [];
+let legWinAudioLoadingPromise = null;
+let lastLegWinClipIndex = -1;
 let systemThemeMediaQuery = null;
 let systemThemeChangeHandler = null;
 
@@ -445,6 +449,104 @@ function celebrateBigScore(total) {
   } else if (total > 60) {
     playChaseAudio();
   }
+}
+
+function normalizeLegWinAudioEntry(entry) {
+  if (typeof entry === "string") {
+    return entry.trim();
+  }
+  if (entry && typeof entry === "object" && typeof entry.src === "string") {
+    return entry.src.trim();
+  }
+  return "";
+}
+
+function createLegWinAudioClip(entry, index) {
+  const source = normalizeLegWinAudioEntry(entry);
+  if (!source || typeof Audio !== "function") {
+    return null;
+  }
+  try {
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.src = source;
+    const clipId =
+      entry && typeof entry === "object" && entry.id
+        ? String(entry.id)
+        : `clip-${index + 1}`;
+    const sanitizedId = clipId.trim().toLowerCase().replace(/\s+/g, "-") || `clip-${index + 1}`;
+    return {
+      id: sanitizedId,
+      source,
+      audio,
+      errorKey: `leg-win-${sanitizedId}`,
+    };
+  } catch (error) {
+    console.warn("Leg-Win Sound konnte nicht initialisiert werden:", error);
+    return null;
+  }
+}
+
+function loadLegWinAudioClips() {
+  if (legWinAudioClips.length) {
+    return Promise.resolve(legWinAudioClips);
+  }
+  if (legWinAudioLoadingPromise) {
+    return legWinAudioLoadingPromise;
+  }
+  if (typeof fetch !== "function") {
+    return Promise.resolve(legWinAudioClips);
+  }
+  legWinAudioLoadingPromise = fetch(LEG_WIN_AUDIO_TRACKS_URL, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((payload) => {
+      if (!Array.isArray(payload)) {
+        legWinAudioClips = [];
+        return legWinAudioClips;
+      }
+      legWinAudioClips = payload
+        .map((entry, index) => createLegWinAudioClip(entry, index))
+        .filter(Boolean);
+      return legWinAudioClips;
+    })
+    .catch((error) => {
+      console.warn("Leg-Win Sounds konnten nicht geladen werden:", error);
+      legWinAudioClips = [];
+      return legWinAudioClips;
+    })
+    .finally(() => {
+      legWinAudioLoadingPromise = null;
+    });
+  return legWinAudioLoadingPromise;
+}
+
+function playLegWinCelebrationAudio() {
+  if (!legWinAudioClips.length) return;
+  const clipCount = legWinAudioClips.length;
+  let index = Math.floor(Math.random() * clipCount);
+  if (clipCount > 1 && index === lastLegWinClipIndex) {
+    index = (index + 1) % clipCount;
+  }
+  lastLegWinClipIndex = index;
+  const clip = legWinAudioClips[index];
+  if (clip?.audio) {
+    playAudioClip(clip.audio, clip.errorKey || clip.id || `leg-win-${index}`);
+  }
+}
+
+function triggerLegWinCelebrationAudio() {
+  if (legWinAudioClips.length) {
+    playLegWinCelebrationAudio();
+    return;
+  }
+  loadLegWinAudioClips().then(() => {
+    playLegWinCelebrationAudio();
+  });
 }
 
 function getDefaultProfileStorageInfo() {
@@ -678,6 +780,7 @@ function prepareNextLeg() {
 
 function handleLegWin(player) {
   if (!player) return;
+  triggerLegWinCelebrationAudio();
   const config = getCurrentMatchConfig();
   const legsToWin = legsNeededForSet(config);
   const setsToWin = config.setsToWin || 1;
@@ -934,6 +1037,7 @@ async function initialize() {
     elements.dartsAudioPlayBtn.addEventListener("click", () => playDartsAudio());
   }
 
+  await loadLegWinAudioClips();
   await refreshProfileStorageInfo({ silent: true });
   await reloadProfilesFromServer();
 
