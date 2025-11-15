@@ -77,11 +77,13 @@ app.post("/api/profile-storage", async (req, res) => {
   if (!mode || !storageProviders[mode]) {
     return res.status(400).json({ error: "Unbekannter Speicher" });
   }
+  const previousMode = currentStorageMode;
   try {
     currentStorageMode = mode;
     await getCurrentStore().ensureReady();
     res.json(buildStorageStatus());
   } catch (error) {
+    currentStorageMode = previousMode;
     console.error("Speichermodus konnte nicht gewechselt werden:", error);
     res.status(500).json({ error: "Speichermodus konnte nicht gewechselt werden" });
   }
