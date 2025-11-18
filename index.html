@@ -33,6 +33,7 @@
             <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
             <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
             <button type="button" class="view-toggle-btn" data-view="training">Training</button>
+            <button type="button" class="view-toggle-btn" data-view="camera">Kamera</button>
             <button type="button" class="view-toggle-btn" data-view="tournament">Turnier</button>
             <button type="button" class="view-toggle-btn" data-view="profiles">Profile</button>
             <button type="button" class="view-toggle-btn" data-view="leaderboard">Leaderboard</button>
@@ -439,6 +440,156 @@
         <p class="audio-controls-hint">
           Chase the Sun startet automatisch bei W&uuml;rfen &gt; 60 Punkten, die Gladbach-Hymne bei W&uuml;rfen &gt; 100 und &lt; 180 Punkten und Darts 180 bei exakt 180 Punkten.
         </p>
+      </div>
+    </section>
+
+    <section class="card camera-card" aria-labelledby="camera-title" hidden>
+      <div class="camera-header">
+        <div>
+          <p class="camera-eyebrow">Computer Vision · Beta</p>
+          <h2 id="camera-title">Kamera Modus</h2>
+          <p class="camera-subtitle">
+            Automatisches Scoring per Webcam – vom Videostream über Kalibrierung bis zum Score.
+          </p>
+        </div>
+        <div class="camera-header-meta">
+          <span id="camera-support-indicator" class="camera-support-indicator" role="status">
+            Verfügbarkeit wird geprüft …
+          </span>
+          <button type="button" class="ghost" id="camera-help-toggle">Leitfaden</button>
+        </div>
+      </div>
+      <div class="camera-grid">
+        <div class="camera-preview-panel">
+          <div class="camera-preview-wrapper">
+            <video id="camera-video" playsinline autoplay muted></video>
+            <canvas id="camera-overlay" width="1280" height="720" aria-hidden="true"></canvas>
+            <div id="camera-preview-placeholder" class="camera-preview-placeholder">
+              <p>Kein Videostream aktiv.</p>
+              <p>Starte die Kamera, richte das Board aus und kalibriere den Mittelpunkt.</p>
+            </div>
+          </div>
+          <div class="camera-preview-controls">
+            <button type="button" class="primary" id="camera-connect-btn">Kamera öffnen</button>
+            <button type="button" class="ghost" id="camera-stop-btn">Stoppen</button>
+            <button type="button" class="ghost" id="camera-reference-btn">Referenzbild speichern</button>
+            <button type="button" id="camera-calibration-btn">Kalibrierung starten</button>
+            <button type="button" id="camera-detect-btn">Analyse nach Wurf</button>
+            <button type="button" class="ghost" id="camera-simulate-btn">Treffer simulieren</button>
+            <label class="camera-auto-commit">
+              <input type="checkbox" id="camera-auto-commit" />
+              <span>Treffer automatisch buchen</span>
+            </label>
+          </div>
+          <div class="camera-status-line">
+            <p id="camera-status-text">Status: Inaktiv</p>
+            <p id="camera-calibration-status" class="camera-calibration-status">Kalibrierung erforderlich</p>
+          </div>
+          <div class="camera-log" id="camera-log" aria-live="polite"></div>
+        </div>
+        <div class="camera-info-panel">
+          <section class="camera-pipeline" aria-labelledby="camera-pipeline-title">
+            <h3 id="camera-pipeline-title">OpenCV Pipeline</h3>
+            <ol class="camera-pipeline-list" id="camera-pipeline-list">
+              <li data-step="stream">
+                <div>
+                  <strong>Videostream holen</strong>
+                  <p>getUserMedia → opencv.js Mat</p>
+                </div>
+                <span class="camera-step-status" data-status="pending">Ausstehend</span>
+              </li>
+              <li data-step="calibration">
+                <div>
+                  <strong>Board kalibrieren</strong>
+                  <p>HoughCircles + Perspektivkorrektur</p>
+                </div>
+                <span class="camera-step-status" data-status="pending">Ausstehend</span>
+              </li>
+              <li data-step="detection">
+                <div>
+                  <strong>Darts erkennen</strong>
+                  <p>Background Subtraction + Konturen</p>
+                </div>
+                <span class="camera-step-status" data-status="pending">Ausstehend</span>
+              </li>
+              <li data-step="conversion">
+                <div>
+                  <strong>(x, y) → Score</strong>
+                  <p>Polarkoordinaten · Ring &amp; Sektor</p>
+                </div>
+                <span class="camera-step-status" data-status="pending">Ausstehend</span>
+              </li>
+              <li data-step="sync">
+                <div>
+                  <strong>Score buchen</strong>
+                  <p>friendDartBoard Logik (501, Legs, Sets)</p>
+                </div>
+                <span class="camera-step-status" data-status="pending">Ausstehend</span>
+              </li>
+            </ol>
+          </section>
+          <section class="camera-calibration" aria-labelledby="camera-calibration-title">
+            <h3 id="camera-calibration-title">Kalibrierung</h3>
+            <p class="camera-calibration-hint">
+              Klicke zuerst auf den Mittelpunkt, danach auf den äußeren Doppel-Rand. Werte lassen sich hier manuell feinjustieren.
+            </p>
+            <form id="camera-calibration-form" class="camera-calibration-grid">
+              <label>
+                Center X
+                <input type="number" step="0.01" min="0" max="1" id="camera-center-x" name="centerX" />
+              </label>
+              <label>
+                Center Y
+                <input type="number" step="0.01" min="0" max="1" id="camera-center-y" name="centerY" />
+              </label>
+              <label>
+                Radius
+                <input type="number" step="0.01" min="0.1" max="0.7" id="camera-radius" name="boardRadius" />
+              </label>
+              <label>
+                Double innen
+                <input type="number" step="0.01" min="0" max="1" id="camera-double-inner" name="doubleInner" />
+              </label>
+              <label>
+                Triple außen
+                <input type="number" step="0.01" min="0" max="1" id="camera-triple-outer" name="tripleOuter" />
+              </label>
+              <label>
+                Triple innen
+                <input type="number" step="0.01" min="0" max="1" id="camera-triple-inner" name="tripleInner" />
+              </label>
+              <label>
+                Single Bull
+                <input type="number" step="0.01" min="0" max="1" id="camera-single-bull" name="singleBull" />
+              </label>
+              <label>
+                Double Bull
+                <input type="number" step="0.01" min="0" max="1" id="camera-double-bull" name="doubleBull" />
+              </label>
+            </form>
+          </section>
+          <section class="camera-detections" aria-labelledby="camera-detections-title">
+            <div class="camera-detections-header">
+              <h3 id="camera-detections-title">Letzte Erkennungen</h3>
+              <div class="camera-detections-actions">
+                <button type="button" id="camera-clear-detections" class="ghost">Liste leeren</button>
+              </div>
+            </div>
+            <ul id="camera-detection-list" class="camera-detection-list" aria-live="polite">
+              <li class="camera-detection-empty">Noch keine Treffer analysiert.</li>
+            </ul>
+          </section>
+          <section class="camera-instructions" aria-labelledby="camera-instructions-title">
+            <h3 id="camera-instructions-title">Leitfaden</h3>
+            <ul>
+              <li>Videostream holen: Browser <code>getUserMedia</code>, Übergabe an <code>opencv.js</code>.</li>
+              <li>Board erkennen: <code>HoughCircles</code>, <code>Canny</code> &amp; <code>HoughLines</code>, danach Homography.</li>
+              <li>Darts erkennen: Vorher/Nachher Bild differenzieren, Konturen filtern, Spitze lokalisieren.</li>
+              <li>Score berechnen: Koordinaten normalisieren, Radius &amp; Winkel → Ring + 20er-Sektor.</li>
+              <li>Score verbuchen: Treffer werden direkt an die bestehende 501/Leg/Set-Logik übergeben.</li>
+            </ul>
+          </section>
+        </div>
       </div>
     </section>
 

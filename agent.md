@@ -139,3 +139,63 @@ Spielplan automatisch erstellen
 - `doku.md` ergänzt eine kompakte Projektdokumentation inkl. Setup, Voice-Befehlen, Turnier/Leaderboard sowie jetzt auch detaillierter Trainingsbeschreibung.
 - Trainingskarte unterstützt nun zwei Modi: Around the Clock (mit Varianten) und das 121 Game (Checkout-Challenge mit 9 Darts, automatischer Bestwert- und Verlaufs-Tracking).
 - UI angepasst (Modus-Auswahl, Statusanzeigen, Verlauf) sowie Logik in `app.js` erweitert, damit Treffer/Fehlwurf-Buttons zwischen Zahlenlauf und 121-Session unterscheiden.
+
+## KAmera Modus
+1. Grundidee: Was du technisch brauchst
+
+OpenCV  der Ablauf ist immer ungefähr:
+
+Videostream holen (Kamera)
+
+Board kalibrieren → Wo liegt das Board im Bild? Wie ist es verzerrt?
+
+Darts erkennen → wo sind neue Pfeile im Bild?
+
+(x, y) → Score umrechnen (Sektor + Ring berechnen)
+
+Score in deinem bestehenden App-Logik verarbeiten (501, Legs, Sets, Statistiken etc.)
+
+2. OpenCV-Logik (ohne oder mit wenig ML)
+
+Das ist der „klassische“ Weg, den du in fast jeder Sprache hinbekommst.
+
+Was du damit machen kannst
+
+Board erkennen:
+
+Kreis / Ringe mit HoughCircles
+
+Außenkontur & Ringe per Kantenerkennung (Canny) + HoughLines
+
+Dann Homography / Perspektivkorrektur (Board in eine Draufsicht „entzerren“)
+
+Darts erkennen:
+
+Frame vor dem Wurf, Frame nach dem Wurf → Differenzbild (Background Subtraction)
+
+Neue helle/dunkle längliche Objekte (Shaft/Flight) finden (Contour Detection)
+
+Schwerpunkt / Spitze approximieren
+
+Score berechnen:
+
+Du normierst in ein Koordinatensystem: Mittelpunkt (0,0)
+
+Radius = Double, Triple, Single, Bull, Bullseye (vordefinierte Schwellen in Pixeln, per Kalibrierung)
+
+Winkel → welcher 20er-Sektor (0–360° in 20 Zonen à 18°)
+
+Beispiel-Stack je nach App
+
+Web-App (JS/TS):
+
+getUserMedia() → Videostream
+
+opencv.js
+ (OpenCV als WebAssembly im Browser)
+
+Deine vorhandene Dart-Logik in JS/TS, nur um CV ergänzt
+
+Desktop / Backend:
+
+Node.js mit opencv4nodejs

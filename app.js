@@ -83,6 +83,55 @@ const TRAINING_MODES = {
     supportsVariants: false,
   },
 };
+
+const CAMERA_PIPELINE_STEPS = [
+  {
+    id: "stream",
+    title: "Videostream holen",
+    description: "getUserMedia → opencv.js",
+  },
+  {
+    id: "calibration",
+    title: "Board kalibrieren",
+    description: "HoughCircles + Perspektivkorrektur",
+  },
+  {
+    id: "detection",
+    title: "Darts erkennen",
+    description: "Background Subtraction + Konturen",
+  },
+  {
+    id: "conversion",
+    title: "(x, y) → Score",
+    description: "Polarkoordinaten, Ring & Sektor",
+  },
+  {
+    id: "sync",
+    title: "Score buchen",
+    description: "friendDartBoard 501 / Legs / Sets",
+  },
+];
+
+const CAMERA_PIPELINE_STATUS_LABELS = {
+  pending: "Ausstehend",
+  running: "Aktiv",
+  done: "Fertig",
+  error: "Fehler",
+};
+
+const CAMERA_CALIBRATION_STORAGE_KEY = "friendDartCameraCalibration";
+const CAMERA_LOG_LIMIT = 40;
+const CAMERA_DETECTION_LIMIT = 8;
+const DEFAULT_CAMERA_CALIBRATION = {
+  centerX: 0.5,
+  centerY: 0.5,
+  boardRadius: 0.42,
+  doubleInner: 0.94,
+  tripleOuter: 0.63,
+  tripleInner: 0.53,
+  singleBull: 0.09,
+  doubleBull: 0.04,
+};
 const TRAINING_PLAYER_CONFIGS = [
   {
     slot: 0,
@@ -245,6 +294,26 @@ const elements = {
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
   leaderboardBody: document.getElementById("leaderboard-body"),
   leaderboardEmpty: document.getElementById("leaderboard-empty"),
+  cameraCard: document.querySelector(".camera-card"),
+  cameraVideo: document.getElementById("camera-video"),
+  cameraOverlay: document.getElementById("camera-overlay"),
+  cameraPreviewPlaceholder: document.getElementById("camera-preview-placeholder"),
+  cameraConnectBtn: document.getElementById("camera-connect-btn"),
+  cameraStopBtn: document.getElementById("camera-stop-btn"),
+  cameraReferenceBtn: document.getElementById("camera-reference-btn"),
+  cameraCalibrationBtn: document.getElementById("camera-calibration-btn"),
+  cameraDetectBtn: document.getElementById("camera-detect-btn"),
+  cameraSimulateBtn: document.getElementById("camera-simulate-btn"),
+  cameraAutoCommitToggle: document.getElementById("camera-auto-commit"),
+  cameraStatusText: document.getElementById("camera-status-text"),
+  cameraCalibrationStatus: document.getElementById("camera-calibration-status"),
+  cameraLog: document.getElementById("camera-log"),
+  cameraPipelineList: document.getElementById("camera-pipeline-list"),
+  cameraCalibrationForm: document.getElementById("camera-calibration-form"),
+  cameraDetectionList: document.getElementById("camera-detection-list"),
+  cameraClearDetectionsBtn: document.getElementById("camera-clear-detections"),
+  cameraSupportIndicator: document.getElementById("camera-support-indicator"),
+  cameraHelpToggle: document.getElementById("camera-help-toggle"),
 };
 
 const trainingPlayerUi = new Map();
@@ -338,6 +407,9 @@ const voiceControlState = {
   wakeTimer: null,
 };
 
+const cameraCaptureCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+const cameraCaptureCtx = cameraCaptureCanvas ? cameraCaptureCanvas.getContext("2d") : null;
+
 function createInitialTournamentState() {
   return {
     active: false,
@@ -354,6 +426,68 @@ function createInitialTournamentState() {
     championId: null,
     nextMatchTimer: null,
   };
+}
+
+function createCameraPipelineStatusMap() {
+  return CAMERA_PIPELINE_STEPS.reduce((map, step) => {
+    map[step.id] = "pending";
+    return map;
+  }, {});
+}
+
+function createInitialCameraState() {
+  return {
+    supported: Boolean(typeof navigator !== "undefined" && navigator?.mediaDevices?.getUserMedia),
+    permission: "unknown",
+    statusMessage: "Inaktiv",
+    stream: null,
+    streamActive: false,
+    pipelineStatus: createCameraPipelineStatusMap(),
+    calibration: loadCameraCalibration(),
+    calibrationMode: null,
+    pendingCalibrationPoints: [],
+    log: [],
+    detections: [],
+    autoCommit: false,
+    referenceFrame: null,
+    referenceCapturedAt: null,
+    detectionInProgress: false,
+    highlightDetectionId: null,
+    viewportWidth: 1280,
+    viewportHeight: 720,
+  };
+}
+
+function loadCameraCalibration() {
+  if (typeof localStorage === "undefined") {
+    return { ...DEFAULT_CAMERA_CALIBRATION };
+  }
+  try {
+    const raw = localStorage.getItem(CAMERA_CALIBRATION_STORAGE_KEY);
+    if (!raw) {
+      return { ...DEFAULT_CAMERA_CALIBRATION };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_CAMERA_CALIBRATION,
+      ...sanitizeCameraCalibration(parsed),
+    };
+  } catch (error) {
+    console.warn("Kalibrierung konnte nicht geladen werden:", error);
+    return { ...DEFAULT_CAMERA_CALIBRATION };
+  }
+}
+
+function sanitizeCameraCalibration(calibration) {
+  const safe = { ...DEFAULT_CAMERA_CALIBRATION };
+  if (!calibration || typeof calibration !== "object") return safe;
+  Object.keys(DEFAULT_CAMERA_CALIBRATION).forEach((key) => {
+    const value = Number(calibration[key]);
+    if (Number.isFinite(value)) {
+      safe[key] = value;
+    }
+  });
+  return safe;
 }
 
 function createTrainingPlayerState(config = {}) {
@@ -416,12 +550,13 @@ const gameState = {
   currentSet: 1,
   currentLeg: 1,
   legStarterIndex: 0,
-  lastLegWinnerId: null,
-  matchCompleted: false,
-  tournament: createInitialTournamentState(),
-  lastGameConfig: null,
-  lastRematchConfig: null,
-};
+    lastLegWinnerId: null,
+    matchCompleted: false,
+    tournament: createInitialTournamentState(),
+    lastGameConfig: null,
+    lastRematchConfig: null,
+    camera: createInitialCameraState(),
+  };
 
 let profiles = [];
 let pendingProfileImage = null;
@@ -1031,6 +1166,7 @@ async function initialize() {
   setTrainingMessage("Starte das Training, um deine Runde zu tracken.");
   renderTrainingView();
   restoreLayoutModePreference();
+  initializeCameraModule();
   window.addEventListener("resize", closeMainMenu);
   window.addEventListener("orientationchange", closeMainMenu);
   if (elements.rematchBtn) {
@@ -2030,6 +2166,7 @@ function render() {
   renderScoreboard();
   renderHistory();
   updateUndoAvailability();
+  renderCameraView();
 }
 
 const MAX_DOUBLE_OUT_CHECKOUT = 170;
@@ -2868,6 +3005,223 @@ function renderHistory() {
   });
 }
 
+function renderCameraView() {
+  if (!elements.cameraCard) return;
+  const cameraState = gameState.camera;
+  const isActiveView = gameState.viewMode === "camera";
+  elements.cameraCard.hidden = !isActiveView;
+  updateCameraSupportIndicator();
+  if (elements.cameraStatusText) {
+    elements.cameraStatusText.textContent = `Status: ${cameraState.statusMessage}`;
+  }
+  const calibrationReady = isCameraCalibrationReady(cameraState.calibration);
+  if (elements.cameraCalibrationStatus) {
+    elements.cameraCalibrationStatus.textContent = calibrationReady
+      ? `Kalibriert • Mittelpunkt ${cameraState.calibration.centerX.toFixed(2)} / ${cameraState.calibration.centerY.toFixed(2)}`
+      : "Kalibrierung erforderlich";
+    elements.cameraCalibrationStatus.classList.toggle("ready", calibrationReady);
+  }
+  if (elements.cameraAutoCommitToggle) {
+    elements.cameraAutoCommitToggle.checked = cameraState.autoCommit;
+  }
+  if (elements.cameraConnectBtn) {
+    elements.cameraConnectBtn.disabled = cameraState.streamActive || !cameraState.supported;
+  }
+  if (elements.cameraStopBtn) {
+    elements.cameraStopBtn.disabled = !cameraState.streamActive;
+  }
+  if (elements.cameraReferenceBtn) {
+    elements.cameraReferenceBtn.disabled = !cameraState.streamActive || !cameraState.supported;
+  }
+  if (elements.cameraDetectBtn) {
+    const disabled =
+      !cameraState.supported ||
+      !cameraState.streamActive ||
+      !cameraState.referenceFrame ||
+      cameraState.detectionInProgress;
+    elements.cameraDetectBtn.disabled = disabled;
+  }
+  if (elements.cameraCalibrationBtn) {
+    elements.cameraCalibrationBtn.textContent =
+      cameraState.calibrationMode === "center"
+        ? "Mittelpunkt wählen …"
+        : cameraState.calibrationMode === "radius"
+          ? "Doppel-Rand wählen …"
+          : "Kalibrierung starten";
+  }
+  if (elements.cameraPreviewPlaceholder) {
+    elements.cameraPreviewPlaceholder.hidden = cameraState.streamActive;
+  }
+  renderCameraPipelineList();
+  renderCameraLogList();
+  renderCameraDetections();
+  renderCameraOverlay();
+}
+
+function renderCameraPipelineList() {
+  if (!elements.cameraPipelineList) return;
+  const { pipelineStatus } = gameState.camera;
+  const markup = CAMERA_PIPELINE_STEPS.map((step) => {
+    const status = pipelineStatus[step.id] || "pending";
+    const label = CAMERA_PIPELINE_STATUS_LABELS[status] || CAMERA_PIPELINE_STATUS_LABELS.pending;
+    const title = escapeHtml(step.title);
+    const description = escapeHtml(step.description);
+    return `
+      <li data-step="${step.id}">
+        <div>
+          <strong>${title}</strong>
+          <p>${description}</p>
+        </div>
+        <span class="camera-step-status" data-status="${status}">${label}</span>
+      </li>
+    `;
+  }).join("");
+  elements.cameraPipelineList.innerHTML = markup;
+}
+
+function renderCameraLogList() {
+  if (!elements.cameraLog) return;
+  const entries = gameState.camera.log;
+  if (!entries.length) {
+    elements.cameraLog.innerHTML =
+      '<div class="camera-log-entry"><span>Noch keine Ereignisse.</span></div>';
+    return;
+  }
+  elements.cameraLog.innerHTML = entries
+    .map(
+      (entry) => `
+        <div class="camera-log-entry" data-level="${entry.level}">
+          <span class="camera-log-time">${formatCameraLogTime(entry.timestamp)}</span>
+          <span>${escapeHtml(entry.message)}</span>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderCameraDetections() {
+  if (!elements.cameraDetectionList) return;
+  const detections = gameState.camera.detections;
+  if (!detections.length) {
+    elements.cameraDetectionList.innerHTML =
+      '<li class="camera-detection-empty">Noch keine Treffer analysiert.</li>';
+    return;
+  }
+  elements.cameraDetectionList.innerHTML = detections
+    .map((entry) => {
+      const label = entry.dart ? shortLabelForDart(entry.dart) : "Unbekannt";
+      const statusLabel = entry.committed ? "Verbucht" : entry.error || "Offen";
+      const meta = [];
+      if (entry.ringLabel) meta.push(`Ring: ${entry.ringLabel}`);
+      if (entry.sector) meta.push(`Sektor: ${entry.sector}`);
+      meta.push(`Confidence: ${(entry.confidence * 100).toFixed(0)}%`);
+      if (entry.source) meta.push(`Quelle: ${entry.source}`);
+      const metaText = meta.map((value) => escapeHtml(value)).join(" · ");
+      return `
+        <li class="camera-detection-entry" data-id="${entry.id}" data-committed="${entry.committed}">
+          <header>
+            <span>${escapeHtml(label)} (${entry.dart?.score ?? 0})</span>
+            <span>${escapeHtml(statusLabel)}</span>
+          </header>
+          <p class="camera-detection-meta">${metaText}</p>
+          <div class="camera-detection-actions">
+            <button type="button" data-action="commit" data-id="${entry.id}" ${
+              entry.committed || !entry.dart ? "disabled" : ""
+            }>Score übernehmen</button>
+            <button type="button" class="ghost" data-action="focus" data-id="${entry.id}">Im Overlay anzeigen</button>
+          </div>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+function renderCameraOverlay() {
+  const canvas = elements.cameraOverlay;
+  if (!canvas) return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const width = canvas.width || 1280;
+  const height = canvas.height || 720;
+  context.clearRect(0, 0, width, height);
+  const calibration = gameState.camera.calibration;
+  if (isCameraCalibrationReady(calibration)) {
+    const baseSize = Math.min(width, height);
+    const centerX = calibration.centerX * width;
+    const centerY = calibration.centerY * height;
+    const radius = calibration.boardRadius * baseSize;
+    context.save();
+    context.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    context.stroke();
+    context.setLineDash([6, 6]);
+    const drawRing = (relative) => {
+      context.beginPath();
+      context.arc(centerX, centerY, relative * radius, 0, Math.PI * 2);
+      context.stroke();
+    };
+    drawRing(calibration.doubleInner);
+    drawRing(calibration.tripleOuter);
+    drawRing(calibration.tripleInner);
+    drawRing(calibration.singleBull);
+    context.setLineDash([]);
+    context.beginPath();
+    context.moveTo(centerX - 14, centerY);
+    context.lineTo(centerX + 14, centerY);
+    context.moveTo(centerX, centerY - 14);
+    context.lineTo(centerX, centerY + 14);
+    context.stroke();
+    context.restore();
+  }
+  const highlightId = gameState.camera.highlightDetectionId;
+  if (highlightId) {
+    const detection = gameState.camera.detections.find((item) => item.id === highlightId);
+    if (detection) {
+      context.save();
+      context.fillStyle = "rgba(245, 202, 52, 0.9)";
+      context.beginPath();
+      context.arc(detection.normalizedX * width, detection.normalizedY * height, 10, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    }
+  }
+}
+
+function formatCameraLogTime(value) {
+  if (!value) return "--:--";
+  try {
+    return new Intl.DateTimeFormat("de-DE", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(value);
+  } catch (error) {
+    return new Date(value).toLocaleTimeString("de-DE");
+  }
+}
+
+function updateCameraSupportIndicator() {
+  if (!elements.cameraSupportIndicator) return;
+  const supportedLabel = "Webcam bereit – opencv.js optional";
+  if (!gameState.camera.supported) {
+    elements.cameraSupportIndicator.textContent = "Kein Kamerazugriff verfügbar";
+    return;
+  }
+  elements.cameraSupportIndicator.textContent = supportedLabel;
+}
+
+function isCameraCalibrationReady(calibration) {
+  if (!calibration) return false;
+  return (
+    Number.isFinite(calibration.centerX) &&
+    Number.isFinite(calibration.centerY) &&
+    Number.isFinite(calibration.boardRadius) &&
+    calibration.boardRadius > 0.05
+  );
+}
+
 function outModeLabel(mode = gameState.outMode) {
   return OUT_MODE_LABELS[mode] || OUT_MODE_LABELS.double;
 }
@@ -3552,7 +3906,7 @@ function finalizeGameStats() {
 }
 
 function setViewMode(view) {
-  const allowedViews = ["setup", "play", "training", "tournament", "profiles", "leaderboard"];
+  const allowedViews = ["setup", "play", "training", "camera", "tournament", "profiles", "leaderboard"];
   const normalized = allowedViews.includes(view) ? view : "setup";
   if (gameState.viewMode === normalized) {
     updateViewModeUI();
@@ -3577,6 +3931,10 @@ function setViewMode(view) {
     requestAnimationFrame(() => {
       elements.leaderboardCard?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
+  } else if (normalized === "camera") {
+    requestAnimationFrame(() => {
+      elements.cameraCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 }
 
@@ -3587,6 +3945,7 @@ function updateViewModeUI() {
   document.body.classList.toggle("profiles-view", currentView === "profiles");
   document.body.classList.toggle("leaderboard-view", currentView === "leaderboard");
   document.body.classList.toggle("training-view", currentView === "training");
+  document.body.classList.toggle("camera-view", currentView === "camera");
   elements.viewToggleButtons.forEach((button) => {
     const isActive = button.dataset.view === currentView;
     button.classList.toggle("active", isActive);
@@ -3614,7 +3973,548 @@ function updateViewModeUI() {
   if (elements.trainingCard && currentView !== "training") {
     elements.trainingCard.hidden = true;
   }
+  if (currentView === "camera") {
+    renderCameraView();
+  }
   closeMainMenu();
+}
+
+function initializeCameraModule() {
+  if (!elements.cameraCard) return;
+  gameState.camera.supported = Boolean(navigator?.mediaDevices?.getUserMedia);
+  elements.cameraConnectBtn?.addEventListener("click", () => startCameraStream());
+  elements.cameraStopBtn?.addEventListener("click", () => stopCameraStream());
+  elements.cameraReferenceBtn?.addEventListener("click", () => captureCameraReferenceFrame());
+  elements.cameraDetectBtn?.addEventListener("click", () => runCameraDetection());
+  elements.cameraCalibrationBtn?.addEventListener("click", () => startCameraCalibrationFlow());
+  elements.cameraSimulateBtn?.addEventListener("click", () => simulateCameraDetection());
+  elements.cameraAutoCommitToggle?.addEventListener("change", (event) =>
+    setCameraAutoCommit(event.target.checked),
+  );
+  elements.cameraClearDetectionsBtn?.addEventListener("click", () => clearCameraDetections());
+  elements.cameraCalibrationForm?.addEventListener("input", (event) =>
+    handleCameraCalibrationInput(event),
+  );
+  elements.cameraOverlay?.addEventListener("click", (event) => handleCameraOverlayClick(event));
+  elements.cameraDetectionList?.addEventListener("click", (event) =>
+    onCameraDetectionListClick(event),
+  );
+  elements.cameraHelpToggle?.addEventListener("click", () => handleCameraHelpToggle());
+  if (elements.cameraVideo) {
+    elements.cameraVideo.addEventListener("loadedmetadata", () => syncCameraCanvasSize());
+  }
+  syncCameraCanvasSize();
+  renderCameraView();
+}
+
+async function startCameraStream() {
+  if (!gameState.camera.supported) {
+    appendCameraLog("Browser unterstützt getUserMedia nicht.", "error");
+    return;
+  }
+  const mediaDevices = navigator?.mediaDevices;
+  if (!mediaDevices?.getUserMedia) {
+    appendCameraLog("Kein Zugriff auf navigator.mediaDevices.", "error");
+    return;
+  }
+  if (gameState.camera.streamActive) {
+    appendCameraLog("Kamera läuft bereits.", "info");
+    return;
+  }
+  try {
+    setCameraPipelineStatus("stream", "running");
+    updateCameraStatus("Kamera wird initialisiert …");
+    const constraints = {
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      audio: false,
+    };
+    const stream = await mediaDevices.getUserMedia(constraints);
+    gameState.camera.stream = stream;
+    gameState.camera.streamActive = true;
+    gameState.camera.permission = "granted";
+    if (elements.cameraVideo) {
+      elements.cameraVideo.srcObject = stream;
+      await elements.cameraVideo.play().catch(() => null);
+    }
+    setCameraPipelineStatus("stream", "done");
+    updateCameraStatus("Videostream aktiv");
+    appendCameraLog("Videostream erfolgreich gestartet.", "success");
+    syncCameraCanvasSize();
+  } catch (error) {
+    gameState.camera.permission = error?.name === "NotAllowedError" ? "denied" : "unknown";
+    setCameraPipelineStatus("stream", "error");
+    updateCameraStatus("Kamera konnte nicht gestartet werden");
+    appendCameraLog(`Kamera-Fehler: ${error.message || error}`, "error");
+  }
+  renderCameraView();
+}
+
+function stopCameraStream() {
+  const cameraState = gameState.camera;
+  if (cameraState.stream) {
+    cameraState.stream.getTracks().forEach((track) => {
+      try {
+        track.stop();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+  cameraState.stream = null;
+  cameraState.streamActive = false;
+  cameraState.referenceFrame = null;
+  cameraState.referenceCapturedAt = null;
+  cameraState.detectionInProgress = false;
+  updateCameraStatus("Inaktiv");
+  setCameraPipelineStatus("stream", "pending");
+  setCameraPipelineStatus("detection", "pending");
+  setCameraPipelineStatus("conversion", "pending");
+  setCameraPipelineStatus("sync", "pending");
+  if (elements.cameraVideo) {
+    elements.cameraVideo.srcObject = null;
+  }
+  appendCameraLog("Kamera gestoppt.", "info");
+  renderCameraView();
+}
+
+function captureCameraReferenceFrame() {
+  if (!gameState.camera.streamActive) {
+    appendCameraLog("Kein aktiver Videostream vorhanden.", "error");
+    return;
+  }
+  const frame = captureCurrentCameraFrame();
+  if (!frame) {
+    appendCameraLog("Frame konnte nicht gelesen werden.", "error");
+    return;
+  }
+  gameState.camera.referenceFrame = frame;
+  gameState.camera.referenceCapturedAt = Date.now();
+  appendCameraLog("Referenzbild gespeichert. Differenzanalyse bereit.", "success");
+  renderCameraView();
+}
+
+function captureCurrentCameraFrame() {
+  if (!cameraCaptureCanvas || !cameraCaptureCtx) return null;
+  const video = elements.cameraVideo;
+  if (!video || !video.videoWidth || !video.videoHeight) return null;
+  cameraCaptureCanvas.width = video.videoWidth;
+  cameraCaptureCanvas.height = video.videoHeight;
+  cameraCaptureCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+  try {
+    return cameraCaptureCtx.getImageData(0, 0, video.videoWidth, video.videoHeight);
+  } catch (error) {
+    console.warn("ImageData konnte nicht gelesen werden:", error);
+    return null;
+  }
+}
+
+async function runCameraDetection() {
+  if (gameState.camera.detectionInProgress) return;
+  if (!gameState.camera.streamActive) {
+    appendCameraLog("Starte zuerst die Kamera.", "error");
+    return;
+  }
+  if (!gameState.camera.referenceFrame) {
+    appendCameraLog("Referenzbild fehlt. Speichere vor dem Wurf ein Referenzframe.", "error");
+    return;
+  }
+  const frame = captureCurrentCameraFrame();
+  if (!frame) {
+    appendCameraLog("Aktueller Frame konnte nicht erfasst werden.", "error");
+    return;
+  }
+  gameState.camera.detectionInProgress = true;
+  setCameraPipelineStatus("detection", "running");
+  updateCameraStatus("Analysiere Differenzbild …");
+  try {
+    const diff = computeCameraDifference(frame, gameState.camera.referenceFrame);
+    if (!diff) {
+      appendCameraLog("Keine markante Veränderung erkannt.", "info");
+      setCameraPipelineStatus("detection", "pending");
+      return;
+    }
+    setCameraPipelineStatus("detection", "done");
+    registerDetectedPoint({
+      normalizedX: diff.x / frame.width,
+      normalizedY: diff.y / frame.height,
+      confidence: clamp(diff.coverage * 5, 0.15, 1),
+      source: "cv-diff",
+    });
+  } finally {
+    gameState.camera.detectionInProgress = false;
+    updateCameraStatus("Analyse abgeschlossen");
+    renderCameraView();
+  }
+}
+
+function computeCameraDifference(currentFrame, referenceFrame) {
+  if (
+    !currentFrame ||
+    !referenceFrame ||
+    currentFrame.width !== referenceFrame.width ||
+    currentFrame.height !== referenceFrame.height
+  ) {
+    return null;
+  }
+  const currentData = currentFrame.data;
+  const referenceData = referenceFrame.data;
+  let changed = 0;
+  let sumX = 0;
+  let sumY = 0;
+  const width = currentFrame.width;
+  const height = currentFrame.height;
+  const threshold = 55;
+  for (let index = 0; index < currentData.length; index += 4) {
+    const delta =
+      Math.abs(currentData[index] - referenceData[index]) +
+      Math.abs(currentData[index + 1] - referenceData[index + 1]) +
+      Math.abs(currentData[index + 2] - referenceData[index + 2]);
+    if (delta > threshold) {
+      const pixelIndex = index / 4;
+      const x = pixelIndex % width;
+      const y = Math.floor(pixelIndex / width);
+      sumX += x;
+      sumY += y;
+      changed += 1;
+    }
+  }
+  if (changed < width * height * 0.0005) {
+    return null;
+  }
+  return {
+    x: sumX / changed,
+    y: sumY / changed,
+    coverage: changed / (width * height),
+  };
+}
+
+function registerDetectedPoint({ normalizedX, normalizedY, confidence = 0.6, source = "analysis" }) {
+  const conversion = convertNormalizedPointToDart({ x: normalizedX, y: normalizedY });
+  const detection = {
+    id: uid(),
+    normalizedX,
+    normalizedY,
+    confidence: clamp(confidence, 0, 1),
+    source,
+    ringLabel: conversion?.ringLabel || "Miss",
+    sector: conversion?.sector ?? null,
+    dart: conversion?.dart || null,
+    committed: false,
+    error: conversion?.error || null,
+    createdAt: Date.now(),
+  };
+  gameState.camera.detections.unshift(detection);
+  if (gameState.camera.detections.length > CAMERA_DETECTION_LIMIT) {
+    gameState.camera.detections.length = CAMERA_DETECTION_LIMIT;
+  }
+  gameState.camera.highlightDetectionId = detection.id;
+  appendCameraLog(
+    detection.dart
+      ? `Analyse erfolgreich: ${shortLabelForDart(detection.dart)}`
+      : detection.error || "Keine valide Position ermittelt.",
+    detection.dart ? "success" : "error",
+  );
+  setCameraPipelineStatus("conversion", detection.dart ? "done" : "error");
+  renderCameraView();
+  if (gameState.camera.autoCommit && detection.dart) {
+    commitCameraDetection(detection.id);
+  }
+}
+
+function convertNormalizedPointToDart(point, calibration = gameState.camera.calibration) {
+  if (!isCameraCalibrationReady(calibration)) {
+    return { error: "Board nicht kalibriert" };
+  }
+  const width = gameState.camera.viewportWidth || 1280;
+  const height = gameState.camera.viewportHeight || 720;
+  const dxPx = (point.x - calibration.centerX) * width;
+  const dyPx = (point.y - calibration.centerY) * height;
+  const distance = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
+  if (!Number.isFinite(distance)) {
+    return { error: "Ungültige Koordinate" };
+  }
+  const baseSize = Math.min(width, height);
+  const boardRadiusPx = calibration.boardRadius * baseSize;
+  const normalizedRadius = distance / boardRadiusPx;
+  const createMiss = () => ({
+    ringLabel: "Offboard",
+    sector: null,
+    dart: {
+      label: "0",
+      readable: "0",
+      score: 0,
+      isDouble: false,
+      multiplier: 1,
+    },
+  });
+  if (normalizedRadius > 1.05) {
+    return createMiss();
+  }
+  if (normalizedRadius <= calibration.doubleBull) {
+    return {
+      ringLabel: "Double Bull",
+      sector: null,
+      dart: { label: "DB", readable: "Double Bull", score: 50, isDouble: true, multiplier: 2 },
+    };
+  }
+  if (normalizedRadius <= calibration.singleBull) {
+    return {
+      ringLabel: "Single Bull",
+      sector: null,
+      dart: { label: "SB", readable: "Single Bull", score: 25, isDouble: false, multiplier: 1 },
+    };
+  }
+  let multiplier = 1;
+  let ringLabel = "Single";
+  if (normalizedRadius >= calibration.doubleInner && normalizedRadius <= 1.05) {
+    multiplier = 2;
+    ringLabel = "Double";
+  } else if (
+    normalizedRadius >= calibration.tripleInner &&
+    normalizedRadius <= calibration.tripleOuter
+  ) {
+    multiplier = 3;
+    ringLabel = "Triple";
+  }
+  const angle = Math.atan2(-(point.y - calibration.centerY), point.x - calibration.centerX);
+  const degrees = (angle * 180) / Math.PI;
+  const normalizedAngle = (450 - degrees + 360) % 360;
+  const index = Math.floor(normalizedAngle / 18) % 20;
+  const sector = DARTBOARD_NUMBERS[index] || 20;
+  const config = MULTIPLIER_CONFIG[multiplier] || MULTIPLIER_CONFIG[1];
+  const label = multiplier === 1 ? `${sector}` : `${config.short}${sector}`;
+  return {
+    ringLabel,
+    sector,
+    dart: {
+      label,
+      readable: `${config.label} ${sector}`,
+      score: sector * multiplier,
+      isDouble: multiplier === 2,
+      multiplier,
+    },
+  };
+}
+
+function commitCameraDetection(id) {
+  const detection = gameState.camera.detections.find((entry) => entry.id === id);
+  if (!detection || detection.committed) return;
+  if (!detection.dart) {
+    detection.error = "Kein Score berechnet.";
+    appendCameraLog(detection.error, "error");
+    renderCameraDetections();
+    return;
+  }
+  if (!gameState.legActive) {
+    detection.error = "Kein aktives Leg.";
+    appendCameraLog("Kein aktives Leg – Score nicht übernommen.", "error");
+    renderCameraDetections();
+    return;
+  }
+  setCameraPipelineStatus("sync", "running");
+  applyDart({
+    type: "dart",
+    readable: detection.dart.readable,
+    dart: detection.dart,
+  });
+  detection.committed = true;
+  detection.error = null;
+  appendCameraLog(`Score ${shortLabelForDart(detection.dart)} verbucht.`, "success");
+  setCameraPipelineStatus("sync", "done");
+  renderCameraDetections();
+}
+
+function clearCameraDetections() {
+  gameState.camera.detections = [];
+  gameState.camera.highlightDetectionId = null;
+  appendCameraLog("Erkennungsliste geleert.", "info");
+  setCameraPipelineStatus("conversion", "pending");
+  setCameraPipelineStatus("sync", "pending");
+  renderCameraDetections();
+  renderCameraOverlay();
+}
+
+function setCameraAutoCommit(enabled) {
+  gameState.camera.autoCommit = Boolean(enabled);
+  appendCameraLog(
+    enabled ? "Automatisches Verbuchen aktiviert." : "Automatisches Verbuchen deaktiviert.",
+    "info",
+  );
+  renderCameraView();
+}
+
+function appendCameraLog(message, level = "info") {
+  const entry = {
+    id: uid(),
+    message,
+    level,
+    timestamp: Date.now(),
+  };
+  gameState.camera.log.unshift(entry);
+  if (gameState.camera.log.length > CAMERA_LOG_LIMIT) {
+    gameState.camera.log.length = CAMERA_LOG_LIMIT;
+  }
+}
+
+function updateCameraStatus(message) {
+  gameState.camera.statusMessage = message;
+}
+
+function setCameraPipelineStatus(step, status) {
+  if (!gameState.camera.pipelineStatus[step]) return;
+  gameState.camera.pipelineStatus[step] = status;
+}
+
+function startCameraCalibrationFlow() {
+  gameState.camera.calibrationMode = "center";
+  gameState.camera.highlightDetectionId = null;
+  setCameraPipelineStatus("calibration", "running");
+  appendCameraLog("Kalibrierung gestartet. Klicke auf den Mittelpunkt.", "info");
+  updateCameraStatus("Kalibrierung: Mittelpunkt wählen");
+  renderCameraView();
+}
+
+function handleCameraOverlayClick(event) {
+  const canvas = elements.cameraOverlay;
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (event.clientX - rect.left) * scaleX;
+  const y = (event.clientY - rect.top) * scaleY;
+  const normalizedX = clamp(x / canvas.width, 0, 1);
+  const normalizedY = clamp(y / canvas.height, 0, 1);
+  if (gameState.camera.calibrationMode === "center") {
+    gameState.camera.calibration.centerX = normalizedX;
+    gameState.camera.calibration.centerY = normalizedY;
+    gameState.camera.calibrationMode = "radius";
+    appendCameraLog("Mittelpunkt gesetzt. Klicke den äußeren Doppel-Rand.", "info");
+    updateCameraStatus("Kalibrierung: Doppel-Rand wählen");
+    saveCameraCalibration(gameState.camera.calibration);
+    renderCameraView();
+    return;
+  }
+  if (gameState.camera.calibrationMode === "radius") {
+    const baseSize = Math.min(canvas.width, canvas.height);
+    const centerX = gameState.camera.calibration.centerX * canvas.width;
+    const centerY = gameState.camera.calibration.centerY * canvas.height;
+    const deltaX = x - centerX;
+    const deltaY = y - centerY;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    gameState.camera.calibration.boardRadius = clamp(distance / baseSize, 0.2, 0.6);
+    gameState.camera.calibrationMode = null;
+    setCameraPipelineStatus("calibration", "done");
+    appendCameraLog("Kalibrierung abgeschlossen.", "success");
+    updateCameraStatus("Kalibrierung abgeschlossen");
+    saveCameraCalibration(gameState.camera.calibration);
+    renderCameraView();
+    return;
+  }
+  registerDetectedPoint({
+    normalizedX,
+    normalizedY,
+    confidence: 0.7,
+    source: "overlay",
+  });
+}
+
+function handleCameraCalibrationInput(event) {
+  const target = event.target;
+  if (!target || !target.name) return;
+  const value = Number(target.value);
+  if (!Number.isFinite(value)) return;
+  if (!gameState.camera.calibration) {
+    gameState.camera.calibration = { ...DEFAULT_CAMERA_CALIBRATION };
+  }
+  const isRadiusField = target.name === "boardRadius";
+  const min = isRadiusField ? 0.1 : 0;
+  const max = isRadiusField ? 0.7 : 1;
+  const clamped = clamp(value, min, max);
+  gameState.camera.calibration[target.name] = clamped;
+  target.value = clamped;
+  saveCameraCalibration(gameState.camera.calibration);
+  if (isCameraCalibrationReady(gameState.camera.calibration)) {
+    setCameraPipelineStatus("calibration", "done");
+  }
+  renderCameraOverlay();
+}
+
+function onCameraDetectionListClick(event) {
+  const button = event.target.closest("button[data-id]");
+  if (!button) return;
+  const id = button.dataset.id;
+  if (!id) return;
+  if (button.dataset.action === "commit") {
+    commitCameraDetection(id);
+  } else if (button.dataset.action === "focus") {
+    focusCameraDetection(id);
+  }
+}
+
+function focusCameraDetection(id) {
+  const detection = gameState.camera.detections.find((entry) => entry.id === id);
+  if (!detection) return;
+  gameState.camera.highlightDetectionId = id;
+  renderCameraOverlay();
+}
+
+function simulateCameraDetection() {
+  if (!isCameraCalibrationReady(gameState.camera.calibration)) {
+    appendCameraLog("Kalibriere das Board, bevor du Simulationen nutzt.", "error");
+    return;
+  }
+  const angle = Math.random() * Math.PI * 2;
+  const baseSize = Math.min(gameState.camera.viewportWidth || 1280, gameState.camera.viewportHeight || 720);
+  const maxRadiusPx = gameState.camera.calibration.boardRadius * baseSize * 0.9;
+  const radiusPx = Math.random() * maxRadiusPx;
+  const width = gameState.camera.viewportWidth || 1280;
+  const height = gameState.camera.viewportHeight || 720;
+  const normalizedX =
+    gameState.camera.calibration.centerX + (Math.cos(angle) * radiusPx) / width;
+  const normalizedY =
+    gameState.camera.calibration.centerY + (Math.sin(angle) * radiusPx) / height;
+  registerDetectedPoint({
+    normalizedX: clamp(normalizedX, 0, 1),
+    normalizedY: clamp(normalizedY, 0, 1),
+    confidence: 0.8,
+    source: "simulation",
+  });
+}
+
+function syncCameraCanvasSize() {
+  const canvas = elements.cameraOverlay;
+  if (!canvas) return;
+  const video = elements.cameraVideo;
+  const width = video?.videoWidth || 1280;
+  const height = video?.videoHeight || 720;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  gameState.camera.viewportWidth = width;
+  gameState.camera.viewportHeight = height;
+  renderCameraOverlay();
+}
+
+function handleCameraHelpToggle() {
+  const target = document.getElementById("camera-instructions-title");
+  if (target && typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function saveCameraCalibration(calibration) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(CAMERA_CALIBRATION_STORAGE_KEY, JSON.stringify(calibration));
+  } catch (error) {
+    console.warn("Kalibrierung konnte nicht gespeichert werden:", error);
+  }
 }
 
 function getTrainingPlayerUi(slot) {
@@ -4716,6 +5616,21 @@ function uid() {
     return window.crypto.randomUUID();
   }
   return `id-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function clamp(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(Math.max(value, min), max);
+}
+
+function escapeHtml(value) {
+  if (value == null) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 
