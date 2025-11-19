@@ -3137,7 +3137,7 @@ body:not(.sets-mode) .player-legs-wrapper {
   border-radius: 1rem;
   --camera-calibration-zoom: 1;
   overflow: hidden;
-  background: radial-gradient(circle at 30% 30%, rgba(36, 85, 245, 0.25), rgba(23, 32, 54, 0.9));
+  background: #000;
   border: 1px solid rgba(23, 32, 54, 0.12);
   min-height: 320px;
 }
@@ -3153,11 +3153,15 @@ body:not(.sets-mode) .player-legs-wrapper {
 
 #camera-video {
   pointer-events: none;
-  filter: saturate(1.1);
 }
 
 #camera-overlay {
   pointer-events: auto;
+}
+
+.camera-overlay-hidden {
+  opacity: 0;
+  pointer-events: none !important;
 }
 
 .camera-preview-wrapper.has-calibration-zoom #camera-video,
@@ -3173,10 +3177,11 @@ body:not(.sets-mode) .player-legs-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   text-align: center;
-  padding: 1rem;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(14, 116, 144, 0.8));
+  padding: 1rem 1rem 2rem;
+  background: transparent;
+  backdrop-filter: none;
   color: #fff;
   font-weight: 600;
   gap: 0.25rem;
@@ -3199,6 +3204,44 @@ body:not(.sets-mode) .player-legs-wrapper {
 }
 
 .camera-auto-commit input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.camera-preview-advanced {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.camera-resolution-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.camera-resolution-control select {
+  border: 1px solid var(--surface-border);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.9rem;
+  min-width: 160px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.camera-overlay-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.camera-overlay-toggle input {
   width: 1rem;
   height: 1rem;
 }

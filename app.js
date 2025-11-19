@@ -147,6 +147,13 @@ const CAMERA_CALIBRATION_FORM_FIELDS = [
   "singleBull",
   "doubleBull",
 ];
+const CAMERA_RESOLUTION_PRESETS = [
+  { id: "1280x720", label: "HD (1280×720)", width: 1280, height: 720 },
+  { id: "1920x1080", label: "Full HD (1920×1080)", width: 1920, height: 1080 },
+  { id: "2560x1440", label: "QHD (2560×1440)", width: 2560, height: 1440 },
+  { id: "3840x2160", label: "UHD (3840×2160)", width: 3840, height: 2160 },
+];
+const DEFAULT_CAMERA_RESOLUTION = "1920x1080";
 const TRAINING_PLAYER_CONFIGS = [
   {
     slot: 0,
@@ -321,6 +328,9 @@ const elements = {
   cameraDetectBtn: document.getElementById("camera-detect-btn"),
   cameraSimulateBtn: document.getElementById("camera-simulate-btn"),
   cameraAutoCommitToggle: document.getElementById("camera-auto-commit"),
+  cameraResolutionSelect: document.getElementById("camera-resolution-select"),
+  cameraOverlayToggle: document.getElementById("camera-overlay-toggle"),
+  cameraOverlayToggleLabel: document.getElementById("camera-overlay-toggle-label"),
   cameraStatusText: document.getElementById("camera-status-text"),
   cameraCalibrationStatus: document.getElementById("camera-calibration-status"),
   cameraCalibrationZoomInput: document.getElementById("camera-calibration-zoom"),
@@ -466,6 +476,10 @@ function createInitialCameraState() {
     calibration: loadCameraCalibration(),
     calibrationMode: null,
     calibrationZoom: CAMERA_CALIBRATION_ZOOM_DEFAULT,
+    preferredResolution: DEFAULT_CAMERA_RESOLUTION,
+    overlayPreferredVisible: true,
+    overlayVisible: true,
+    overlayLockedByCalibration: false,
     pendingCalibrationPoints: [],
     log: [],
     detections: [],
@@ -3073,8 +3087,11 @@ function renderCameraView() {
   if (elements.cameraPreviewPlaceholder) {
     elements.cameraPreviewPlaceholder.hidden = cameraState.streamActive;
   }
+  syncCameraResolutionControl();
   syncCameraCalibrationForm();
   applyCameraCalibrationZoom();
+  updateCameraOverlayToggle();
+  applyCameraOverlayVisibility();
   renderCameraPipelineList();
   renderCameraLogList();
   renderCameraDetections();
@@ -3211,6 +3228,82 @@ function setCameraCalibrationZoom(value) {
 
 function resetCameraCalibrationZoom() {
   setCameraCalibrationZoom(CAMERA_CALIBRATION_ZOOM_DEFAULT);
+}
+
+function syncCameraResolutionControl() {
+  const select = elements.cameraResolutionSelect;
+  if (!select) return;
+  const value = gameState.camera.preferredResolution || DEFAULT_CAMERA_RESOLUTION;
+  if (select.value !== value) {
+    select.value = value;
+  }
+}
+
+function setCameraResolutionPreference(value) {
+  const preset = getCameraResolutionPreset(value) || getCameraResolutionPreset(DEFAULT_CAMERA_RESOLUTION);
+  if (!preset) return;
+  if (gameState.camera.preferredResolution === preset.id) {
+    return;
+  }
+  gameState.camera.preferredResolution = preset.id;
+  syncCameraResolutionControl();
+  appendCameraLog(`Auflösung auf ${preset.label} gesetzt.`, "info");
+  if (gameState.camera.streamActive) {
+    appendCameraLog("Starte die Kamera neu, um die Änderung zu übernehmen.", "info");
+  }
+}
+
+function getCameraResolutionPreset(value) {
+  if (!value) return null;
+  return CAMERA_RESOLUTION_PRESETS.find((preset) => preset.id === value) || null;
+}
+
+function applyCameraOverlayVisibility() {
+  const overlay = elements.cameraOverlay;
+  if (!overlay) return;
+  overlay.classList.toggle("camera-overlay-hidden", !gameState.camera.overlayVisible);
+  overlay.setAttribute("aria-hidden", gameState.camera.overlayVisible ? "false" : "true");
+}
+
+function setCameraOverlayPreference(visible) {
+  gameState.camera.overlayPreferredVisible = Boolean(visible);
+  if (!gameState.camera.overlayLockedByCalibration) {
+    gameState.camera.overlayVisible = gameState.camera.overlayPreferredVisible;
+    applyCameraOverlayVisibility();
+  }
+  updateCameraOverlayToggle();
+}
+
+function updateCameraOverlayToggle() {
+  const toggle = elements.cameraOverlayToggle;
+  if (!toggle) return;
+  const locked = gameState.camera.overlayLockedByCalibration;
+  toggle.checked = gameState.camera.overlayVisible;
+  toggle.disabled = locked;
+  if (elements.cameraOverlayToggleLabel) {
+    elements.cameraOverlayToggleLabel.textContent = locked
+      ? "Overlay durch Kalibrierung aktiviert"
+      : toggle.checked
+        ? "Overlay ausblenden"
+        : "Overlay anzeigen";
+  }
+}
+
+function lockCameraOverlayForCalibration() {
+  gameState.camera.overlayLockedByCalibration = true;
+  if (!gameState.camera.overlayVisible) {
+    gameState.camera.overlayVisible = true;
+    applyCameraOverlayVisibility();
+  }
+  updateCameraOverlayToggle();
+}
+
+function unlockCameraOverlayAfterCalibration() {
+  if (!gameState.camera.overlayLockedByCalibration) return;
+  gameState.camera.overlayLockedByCalibration = false;
+  gameState.camera.overlayVisible = gameState.camera.overlayPreferredVisible;
+  applyCameraOverlayVisibility();
+  updateCameraOverlayToggle();
 }
 
 function renderCameraOverlay() {
@@ -4068,6 +4161,12 @@ function initializeCameraModule() {
   elements.cameraAutoCommitToggle?.addEventListener("change", (event) =>
     setCameraAutoCommit(event.target.checked),
   );
+  elements.cameraResolutionSelect?.addEventListener("change", (event) =>
+    setCameraResolutionPreference(event.target.value),
+  );
+  elements.cameraOverlayToggle?.addEventListener("change", (event) =>
+    setCameraOverlayPreference(event.target.checked),
+  );
   elements.cameraCalibrationZoomInput?.addEventListener("input", (event) =>
     setCameraCalibrationZoom(event.target.value),
   );
@@ -4111,11 +4210,15 @@ async function startCameraStream() {
     const constraints = {
       video: {
         facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
       },
       audio: false,
     };
+    const preferred = getCameraResolutionPreset(gameState.camera.preferredResolution);
+    if (preferred) {
+      constraints.video.width = { min: preferred.width, ideal: preferred.width };
+      constraints.video.height = { min: preferred.height, ideal: preferred.height };
+      constraints.video.aspectRatio = { ideal: preferred.width / preferred.height };
+    }
     const stream = await mediaDevices.getUserMedia(constraints);
     gameState.camera.stream = stream;
     gameState.camera.streamActive = true;
@@ -4128,6 +4231,7 @@ async function startCameraStream() {
     updateCameraStatus("Videostream aktiv");
     appendCameraLog("Videostream erfolgreich gestartet.", "success");
     syncCameraCanvasSize();
+    logCameraStreamResolution();
   } catch (error) {
     gameState.camera.permission = error?.name === "NotAllowedError" ? "denied" : "unknown";
     setCameraPipelineStatus("stream", "error");
@@ -4150,6 +4254,8 @@ function stopCameraStream() {
   }
   cameraState.stream = null;
   cameraState.streamActive = false;
+  cameraState.calibrationMode = null;
+  unlockCameraOverlayAfterCalibration();
   cameraState.referenceFrame = null;
   cameraState.referenceCapturedAt = null;
   cameraState.detectionInProgress = false;
@@ -4455,6 +4561,7 @@ function setCameraPipelineStatus(step, status) {
 
 function startCameraCalibrationFlow() {
   gameState.camera.calibrationMode = "center";
+  lockCameraOverlayForCalibration();
   gameState.camera.highlightDetectionId = null;
   setCameraPipelineStatus("calibration", "running");
   appendCameraLog("Kalibrierung gestartet. Klicke auf den Mittelpunkt.", "info");
@@ -4499,6 +4606,7 @@ function handleCameraOverlayClick(event) {
     updateCameraStatus("Kalibrierung abgeschlossen");
     saveCameraCalibration(calibration);
     syncCameraCalibrationForm();
+    unlockCameraOverlayAfterCalibration();
     renderCameraView();
     return;
   }
@@ -4637,6 +4745,15 @@ function syncCameraCanvasSize() {
   gameState.camera.viewportWidth = width;
   gameState.camera.viewportHeight = height;
   renderCameraOverlay();
+}
+
+function logCameraStreamResolution() {
+  const video = elements.cameraVideo;
+  if (!video) return;
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return;
+  appendCameraLog(`Stream-Auflösung erkannt: ${width}×${height}`, "info");
 }
 
 function handleCameraHelpToggle() {

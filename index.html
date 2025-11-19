@@ -480,6 +480,21 @@
               <input type="checkbox" id="camera-auto-commit" />
               <span>Treffer automatisch buchen</span>
             </label>
+            <div class="camera-preview-advanced">
+              <label class="camera-resolution-control">
+                <span>Auflösung</span>
+                <select id="camera-resolution-select">
+                  <option value="1280x720">HD (1280×720)</option>
+                  <option value="1920x1080" selected>Full HD (1920×1080)</option>
+                  <option value="2560x1440">QHD (2560×1440)</option>
+                  <option value="3840x2160">UHD (3840×2160)</option>
+                </select>
+              </label>
+              <label class="camera-overlay-toggle">
+                <input type="checkbox" id="camera-overlay-toggle" checked />
+                <span id="camera-overlay-toggle-label">Overlay anzeigen</span>
+              </label>
+            </div>
           </div>
           <div class="camera-status-line">
             <p id="camera-status-text">Status: Inaktiv</p>
