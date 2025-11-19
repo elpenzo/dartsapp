@@ -533,6 +533,84 @@
             <p class="camera-calibration-hint">
               Klicke zuerst auf den Mittelpunkt, danach auf den äußeren Doppel-Rand. Werte lassen sich hier manuell feinjustieren.
             </p>
+            <div class="camera-calibration-tools">
+              <div class="camera-calibration-tool">
+                <div class="camera-calibration-tool-header">
+                  <span>Zoom</span>
+                  <span id="camera-calibration-zoom-value">1.0&times;</span>
+                </div>
+                <div class="camera-zoom-controls">
+                  <input
+                    type="range"
+                    min="1"
+                    max="3"
+                    step="0.1"
+                    value="1"
+                    id="camera-calibration-zoom"
+                    aria-label="Kalibrierungs-Zoom einstellen"
+                  />
+                  <button type="button" class="ghost" id="camera-calibration-zoom-reset">Zurücksetzen</button>
+                </div>
+              </div>
+              <div class="camera-calibration-tool">
+                <div class="camera-calibration-tool-header">
+                  <span>Feinjustierung</span>
+                  <span class="camera-calibration-tool-hint">Mittelpunkt &amp; Radius in kleinen Schritten</span>
+                </div>
+                <div
+                  id="camera-calibration-fine"
+                  class="camera-calibration-fine"
+                  role="group"
+                  aria-label="Feinjustierungsbedienelemente"
+                >
+                  <div class="camera-calibration-dpad">
+                    <button
+                      type="button"
+                      data-action="center"
+                      data-axis="y"
+                      data-direction="-1"
+                      aria-label="Mittelpunkt nach oben verschieben"
+                    >
+                      Oben
+                    </button>
+                    <div class="camera-calibration-dpad-middle">
+                      <button
+                        type="button"
+                        data-action="center"
+                        data-axis="x"
+                        data-direction="-1"
+                        aria-label="Mittelpunkt nach links verschieben"
+                      >
+                        Links
+                      </button>
+                      <button
+                        type="button"
+                        data-action="center"
+                        data-axis="x"
+                        data-direction="1"
+                        aria-label="Mittelpunkt nach rechts verschieben"
+                      >
+                        Rechts
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      data-action="center"
+                      data-axis="y"
+                      data-direction="1"
+                      aria-label="Mittelpunkt nach unten verschieben"
+                    >
+                      Unten
+                    </button>
+                  </div>
+                  <div class="camera-radius-fine">
+                    <button type="button" data-action="radius" data-direction="-1">Radius -</button>
+                    <span>Radius</span>
+                    <button type="button" data-action="radius" data-direction="1">Radius +</button>
+                  </div>
+                </div>
+              </div>
+            </div>
             <form id="camera-calibration-form" class="camera-calibration-grid">
               <label>
                 Center X

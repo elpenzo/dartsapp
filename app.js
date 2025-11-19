@@ -122,6 +122,11 @@ const CAMERA_PIPELINE_STATUS_LABELS = {
 const CAMERA_CALIBRATION_STORAGE_KEY = "friendDartCameraCalibration";
 const CAMERA_LOG_LIMIT = 40;
 const CAMERA_DETECTION_LIMIT = 8;
+const CAMERA_CALIBRATION_ZOOM_MIN = 1;
+const CAMERA_CALIBRATION_ZOOM_MAX = 3;
+const CAMERA_CALIBRATION_ZOOM_DEFAULT = 1;
+const CAMERA_CALIBRATION_CENTER_FINE_STEP = 0.005;
+const CAMERA_CALIBRATION_RADIUS_FINE_STEP = 0.005;
 const DEFAULT_CAMERA_CALIBRATION = {
   centerX: 0.5,
   centerY: 0.5,
@@ -132,6 +137,16 @@ const DEFAULT_CAMERA_CALIBRATION = {
   singleBull: 0.09,
   doubleBull: 0.04,
 };
+const CAMERA_CALIBRATION_FORM_FIELDS = [
+  "centerX",
+  "centerY",
+  "boardRadius",
+  "doubleInner",
+  "tripleOuter",
+  "tripleInner",
+  "singleBull",
+  "doubleBull",
+];
 const TRAINING_PLAYER_CONFIGS = [
   {
     slot: 0,
@@ -298,6 +313,7 @@ const elements = {
   cameraVideo: document.getElementById("camera-video"),
   cameraOverlay: document.getElementById("camera-overlay"),
   cameraPreviewPlaceholder: document.getElementById("camera-preview-placeholder"),
+  cameraPreviewWrapper: document.querySelector(".camera-preview-wrapper"),
   cameraConnectBtn: document.getElementById("camera-connect-btn"),
   cameraStopBtn: document.getElementById("camera-stop-btn"),
   cameraReferenceBtn: document.getElementById("camera-reference-btn"),
@@ -307,6 +323,10 @@ const elements = {
   cameraAutoCommitToggle: document.getElementById("camera-auto-commit"),
   cameraStatusText: document.getElementById("camera-status-text"),
   cameraCalibrationStatus: document.getElementById("camera-calibration-status"),
+  cameraCalibrationZoomInput: document.getElementById("camera-calibration-zoom"),
+  cameraCalibrationZoomValue: document.getElementById("camera-calibration-zoom-value"),
+  cameraCalibrationZoomReset: document.getElementById("camera-calibration-zoom-reset"),
+  cameraCalibrationFineControls: document.getElementById("camera-calibration-fine"),
   cameraLog: document.getElementById("camera-log"),
   cameraPipelineList: document.getElementById("camera-pipeline-list"),
   cameraCalibrationForm: document.getElementById("camera-calibration-form"),
@@ -445,6 +465,7 @@ function createInitialCameraState() {
     pipelineStatus: createCameraPipelineStatusMap(),
     calibration: loadCameraCalibration(),
     calibrationMode: null,
+    calibrationZoom: CAMERA_CALIBRATION_ZOOM_DEFAULT,
     pendingCalibrationPoints: [],
     log: [],
     detections: [],
@@ -3052,6 +3073,8 @@ function renderCameraView() {
   if (elements.cameraPreviewPlaceholder) {
     elements.cameraPreviewPlaceholder.hidden = cameraState.streamActive;
   }
+  syncCameraCalibrationForm();
+  applyCameraCalibrationZoom();
   renderCameraPipelineList();
   renderCameraLogList();
   renderCameraDetections();
@@ -3134,6 +3157,60 @@ function renderCameraDetections() {
       `;
     })
     .join("");
+}
+
+function syncCameraCalibrationForm() {
+  const form = elements.cameraCalibrationForm;
+  if (!form) return;
+  const calibration = gameState.camera.calibration;
+  if (!calibration) return;
+  CAMERA_CALIBRATION_FORM_FIELDS.forEach((field) => {
+    const input = form.querySelector(`input[name="${field}"]`);
+    if (!input || document.activeElement === input) return;
+    const value = Number(calibration[field]);
+    if (!Number.isFinite(value)) return;
+    const formatted = value.toFixed(2);
+    if (input.value !== formatted) {
+      input.value = formatted;
+    }
+  });
+}
+
+function applyCameraCalibrationZoom() {
+  const wrapper = elements.cameraPreviewWrapper;
+  const slider = elements.cameraCalibrationZoomInput;
+  const label = elements.cameraCalibrationZoomValue;
+  const zoomValue = clamp(
+    Number(gameState.camera.calibrationZoom) || CAMERA_CALIBRATION_ZOOM_DEFAULT,
+    CAMERA_CALIBRATION_ZOOM_MIN,
+    CAMERA_CALIBRATION_ZOOM_MAX,
+  );
+  gameState.camera.calibrationZoom = zoomValue;
+  if (wrapper) {
+    wrapper.style.setProperty("--camera-calibration-zoom", String(zoomValue));
+    wrapper.classList.toggle("has-calibration-zoom", zoomValue > CAMERA_CALIBRATION_ZOOM_MIN + 0.01);
+  }
+  if (slider && document.activeElement !== slider) {
+    slider.value = zoomValue.toFixed(1);
+  }
+  if (label) {
+    label.textContent = `${zoomValue.toFixed(1)}×`;
+  }
+}
+
+function setCameraCalibrationZoom(value) {
+  const numeric = Number(value);
+  const next = clamp(
+    Number.isFinite(numeric) ? numeric : CAMERA_CALIBRATION_ZOOM_DEFAULT,
+    CAMERA_CALIBRATION_ZOOM_MIN,
+    CAMERA_CALIBRATION_ZOOM_MAX,
+  );
+  gameState.camera.calibrationZoom = next;
+  applyCameraCalibrationZoom();
+}
+
+function resetCameraCalibrationZoom() {
+  setCameraCalibrationZoom(CAMERA_CALIBRATION_ZOOM_DEFAULT);
 }
 
 function renderCameraOverlay() {
@@ -3991,6 +4068,13 @@ function initializeCameraModule() {
   elements.cameraAutoCommitToggle?.addEventListener("change", (event) =>
     setCameraAutoCommit(event.target.checked),
   );
+  elements.cameraCalibrationZoomInput?.addEventListener("input", (event) =>
+    setCameraCalibrationZoom(event.target.value),
+  );
+  elements.cameraCalibrationZoomReset?.addEventListener("click", () => resetCameraCalibrationZoom());
+  elements.cameraCalibrationFineControls?.addEventListener("click", (event) =>
+    handleCameraFineControls(event),
+  );
   elements.cameraClearDetectionsBtn?.addEventListener("click", () => clearCameraDetections());
   elements.cameraCalibrationForm?.addEventListener("input", (event) =>
     handleCameraCalibrationInput(event),
@@ -4389,29 +4473,32 @@ function handleCameraOverlayClick(event) {
   const y = (event.clientY - rect.top) * scaleY;
   const normalizedX = clamp(x / canvas.width, 0, 1);
   const normalizedY = clamp(y / canvas.height, 0, 1);
+  const calibration = getOrCreateCameraCalibration();
   if (gameState.camera.calibrationMode === "center") {
-    gameState.camera.calibration.centerX = normalizedX;
-    gameState.camera.calibration.centerY = normalizedY;
+    calibration.centerX = normalizedX;
+    calibration.centerY = normalizedY;
     gameState.camera.calibrationMode = "radius";
     appendCameraLog("Mittelpunkt gesetzt. Klicke den äußeren Doppel-Rand.", "info");
     updateCameraStatus("Kalibrierung: Doppel-Rand wählen");
-    saveCameraCalibration(gameState.camera.calibration);
+    saveCameraCalibration(calibration);
+    syncCameraCalibrationForm();
     renderCameraView();
     return;
   }
   if (gameState.camera.calibrationMode === "radius") {
     const baseSize = Math.min(canvas.width, canvas.height);
-    const centerX = gameState.camera.calibration.centerX * canvas.width;
-    const centerY = gameState.camera.calibration.centerY * canvas.height;
+    const centerX = calibration.centerX * canvas.width;
+    const centerY = calibration.centerY * canvas.height;
     const deltaX = x - centerX;
     const deltaY = y - centerY;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    gameState.camera.calibration.boardRadius = clamp(distance / baseSize, 0.2, 0.6);
+    calibration.boardRadius = clamp(distance / baseSize, 0.2, 0.6);
     gameState.camera.calibrationMode = null;
     setCameraPipelineStatus("calibration", "done");
     appendCameraLog("Kalibrierung abgeschlossen.", "success");
     updateCameraStatus("Kalibrierung abgeschlossen");
-    saveCameraCalibration(gameState.camera.calibration);
+    saveCameraCalibration(calibration);
+    syncCameraCalibrationForm();
     renderCameraView();
     return;
   }
@@ -4428,19 +4515,70 @@ function handleCameraCalibrationInput(event) {
   if (!target || !target.name) return;
   const value = Number(target.value);
   if (!Number.isFinite(value)) return;
-  if (!gameState.camera.calibration) {
-    gameState.camera.calibration = { ...DEFAULT_CAMERA_CALIBRATION };
-  }
+  const calibration = getOrCreateCameraCalibration();
   const isRadiusField = target.name === "boardRadius";
   const min = isRadiusField ? 0.1 : 0;
   const max = isRadiusField ? 0.7 : 1;
   const clamped = clamp(value, min, max);
-  gameState.camera.calibration[target.name] = clamped;
+  calibration[target.name] = clamped;
   target.value = clamped;
-  saveCameraCalibration(gameState.camera.calibration);
-  if (isCameraCalibrationReady(gameState.camera.calibration)) {
+  saveCameraCalibration(calibration);
+  if (isCameraCalibrationReady(calibration)) {
     setCameraPipelineStatus("calibration", "done");
   }
+  renderCameraOverlay();
+}
+
+function getOrCreateCameraCalibration() {
+  if (!gameState.camera.calibration) {
+    gameState.camera.calibration = { ...DEFAULT_CAMERA_CALIBRATION };
+  }
+  return gameState.camera.calibration;
+}
+
+function handleCameraFineControls(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const direction = Number(button.dataset.direction);
+  if (!Number.isFinite(direction) || direction === 0) return;
+  if (button.dataset.action === "center") {
+    const axis = button.dataset.axis === "y" ? "y" : "x";
+    nudgeCameraCalibrationCenter(axis, direction);
+  } else if (button.dataset.action === "radius") {
+    nudgeCameraCalibrationRadius(direction);
+  }
+}
+
+function nudgeCameraCalibrationCenter(axis, direction) {
+  const calibration = getOrCreateCameraCalibration();
+  const step = CAMERA_CALIBRATION_CENTER_FINE_STEP * direction;
+  if (axis === "x") {
+    calibration.centerX = clamp((Number(calibration.centerX) || 0.5) + step, 0, 1);
+  } else {
+    calibration.centerY = clamp((Number(calibration.centerY) || 0.5) + step, 0, 1);
+  }
+  saveCameraCalibration(calibration);
+  if (isCameraCalibrationReady(calibration)) {
+    setCameraPipelineStatus("calibration", "done");
+  }
+  syncCameraCalibrationForm();
+  renderCameraOverlay();
+}
+
+function nudgeCameraCalibrationRadius(direction) {
+  const calibration = getOrCreateCameraCalibration();
+  const nextRadius = clamp(
+    (Number(calibration.boardRadius) || DEFAULT_CAMERA_CALIBRATION.boardRadius) +
+      CAMERA_CALIBRATION_RADIUS_FINE_STEP * direction,
+    0.1,
+    0.7,
+  );
+  calibration.boardRadius = nextRadius;
+  saveCameraCalibration(calibration);
+  if (isCameraCalibrationReady(calibration)) {
+    setCameraPipelineStatus("calibration", "done");
+  }
+  syncCameraCalibrationForm();
   renderCameraOverlay();
 }
 
