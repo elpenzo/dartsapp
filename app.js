@@ -1011,6 +1011,7 @@ function prepareNextLeg() {
   gameState.snapshots = [];
   gameState.lastLegWinnerId = null;
   gameState.matchCompleted = false;
+  setViewMode("tv");
 }
 
 function handleLegWin(player) {
@@ -1338,7 +1339,7 @@ function onSetupSubmit(event) {
   ).filter(Boolean);
 
   startGame(playerConfigs, startingScore, outMode, matchMode);
-  setViewMode("play");
+  setViewMode("tv");
 }
 
 function startGame(
@@ -5762,7 +5763,7 @@ function restartMatchWithSameSettings(options = {}) {
     return false;
   }
   startGame(config.playerConfigs, config.startingScore, config.outMode, config.matchMode);
-  setViewMode("play");
+  setViewMode("tv");
   if (announce) {
     notifyVoiceStatus("success", "Rematch gestartet");
   }
@@ -7512,7 +7513,7 @@ function launchTournamentMatch(target) {
   const matchMode = tournament.matchMode || DEFAULT_MATCH_MODE;
 
   startGame(playerConfigs, startScore, outMode, matchMode);
-  setViewMode("play");
+  setViewMode("tv");
 }
 
 function handleTournamentMatchCompletion(winningPlayer) {
