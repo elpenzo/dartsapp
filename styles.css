@@ -2031,10 +2031,14 @@ body.play-view .player-card.active {
   font-weight: 700;
 }
 
+.player-average-wrapper dd {
+  font-size: 0.95rem;
+}
+
 .player-last-wrapper {
-  flex: 0 1 128px;
-  min-width: 110px;
-  margin-left: -0.65rem;
+  flex: 1.4 1 180px;
+  min-width: 150px;
+  margin-left: -1rem;
 }
 
 .player-last-wrapper dt {
@@ -2042,12 +2046,29 @@ body.play-view .player-card.active {
 }
 
 .player-last {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 600;
   line-height: 1.35;
   color: var(--text-muted);
-  white-space: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   letter-spacing: 0.01em;
+}
+
+.tv-view .player-average-wrapper dd,
+body.tv-view .player-average-wrapper dd {
+  font-size: 1.35rem;
+}
+
+.tv-view .player-last-wrapper,
+body.tv-view .player-last-wrapper {
+  margin-left: -1.6rem;
+}
+
+.tv-view .player-last,
+body.tv-view .player-last {
+  text-align: left;
 }
 
 .player-checkout-wrapper dd {
