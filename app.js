@@ -3466,7 +3466,14 @@ function renderDartNumberButtons() {
 
 function renderDartboardPicker() {
   const container = elements.dartboardPicker;
-  if (!container || container.dataset.rendered === "true") return;
+  if (!container) return;
+
+  const isTvView = gameState.viewMode === "tv";
+  const bullScale = isTvView ? "2" : "1";
+  if (container.dataset.rendered === "true" && container.dataset.bullScale === bullScale) return;
+
+  const existingSvg = container.querySelector("svg");
+  if (existingSvg) existingSvg.remove();
 
   const svgNS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(svgNS, "svg");
@@ -3481,11 +3488,30 @@ function renderDartboardPicker() {
   background.setAttribute("fill", "#0f172a");
   svg.appendChild(background);
 
+  const zeroRingRadius = isTvView ? 205 : 203;
+  const zeroRing = document.createElementNS(svgNS, "circle");
+  zeroRing.setAttribute("cx", "0");
+  zeroRing.setAttribute("cy", "0");
+  zeroRing.setAttribute("r", String(zeroRingRadius));
+  zeroRing.setAttribute("fill", "none");
+  zeroRing.setAttribute("stroke", "transparent");
+  zeroRing.setAttribute("stroke-width", "6");
+  zeroRing.setAttribute("class", "dartboard-zero-ring");
+  zeroRing.dataset.dartSegment = "true";
+  zeroRing.dataset.number = "0";
+  zeroRing.dataset.multiplier = "1";
+  zeroRing.dataset.score = "0";
+  zeroRing.dataset.label = "0";
+  zeroRing.dataset.readable = "Nullwurf";
+  zeroRing.dataset.double = "false";
+  svg.appendChild(zeroRing);
+
   const doubleColors = ["#d64045", "#4ca16b"];
   const tripleColors = ["#d64045", "#4ca16b"];
   const singleColors = ["#1f2937", "#15202b"];
   const innerSingleColors = ["#273447", "#1c2433"];
 
+  const bullMultiplier = isTvView ? 2 : 1;
   const radii = {
     doubleOuter: 200,
     doubleInner: 173,
@@ -3495,8 +3521,8 @@ function renderDartboardPicker() {
     tripleInner: 93,
     singleInnerOuter: 91,
     singleInnerInner: 45,
-    outerBull: 20,
-    innerBull: 7,
+    outerBull: 20 * bullMultiplier,
+    innerBull: 7 * bullMultiplier,
   };
 
   const segmentAngle = 360 / DARTBOARD_NUMBERS.length;
@@ -3606,6 +3632,7 @@ function renderDartboardPicker() {
   svg.appendChild(numbersGroup);
   container.appendChild(svg);
   container.dataset.rendered = "true";
+  container.dataset.bullScale = bullScale;
 }
 
 function updateDartPickerView() {
@@ -4075,8 +4102,8 @@ function finalizeGameStats() {
   saveProfiles();
 }
 
-function setViewMode(view) {
-  const allowedViews = ["setup", "play", "training", "camera", "tournament", "profiles", "leaderboard"];
+  function setViewMode(view) {
+    const allowedViews = ["setup", "play", "tv", "training", "camera", "tournament", "profiles", "leaderboard"];
   const normalized = allowedViews.includes(view) ? view : "setup";
   if (gameState.viewMode === normalized) {
     updateViewModeUI();
@@ -4085,11 +4112,11 @@ function setViewMode(view) {
   }
   gameState.viewMode = normalized;
   updateViewModeUI();
-  if (normalized === "play") {
-    requestAnimationFrame(() => {
-      elements.scoreboardCard?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  } else if (normalized === "training") {
+    if (normalized === "play" || normalized === "tv") {
+      requestAnimationFrame(() => {
+        elements.scoreboardCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    } else if (normalized === "training") {
     requestAnimationFrame(() => {
       elements.trainingCard?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -4108,32 +4135,36 @@ function setViewMode(view) {
   }
 }
 
-function updateViewModeUI() {
-  const currentView = gameState.viewMode;
-  document.body.classList.toggle("play-view", currentView === "play");
-  document.body.classList.toggle("tournament-view", currentView === "tournament");
-  document.body.classList.toggle("profiles-view", currentView === "profiles");
-  document.body.classList.toggle("leaderboard-view", currentView === "leaderboard");
-  document.body.classList.toggle("training-view", currentView === "training");
-  document.body.classList.toggle("camera-view", currentView === "camera");
+  function updateViewModeUI() {
+    const currentView = gameState.viewMode;
+    const isPlayLikeView = currentView === "play" || currentView === "tv";
+    document.body.classList.toggle("play-view", isPlayLikeView);
+    document.body.classList.toggle("tournament-view", currentView === "tournament");
+    document.body.classList.toggle("profiles-view", currentView === "profiles");
+    document.body.classList.toggle("leaderboard-view", currentView === "leaderboard");
+    document.body.classList.toggle("training-view", currentView === "training");
+    document.body.classList.toggle("camera-view", currentView === "camera");
+    document.body.classList.toggle("tv-view", currentView === "tv");
   elements.viewToggleButtons.forEach((button) => {
     const isActive = button.dataset.view === currentView;
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
-  if (elements.scoreboardHeatmap) {
+    if (elements.scoreboardHeatmap) {
+      if (currentView === "play") {
+        renderActivePlayerHeatmap();
+      } else {
+        elements.scoreboardHeatmap.hidden = true;
+      }
+    }
     if (currentView === "play") {
-      renderActivePlayerHeatmap();
-    } else {
-      elements.scoreboardHeatmap.hidden = true;
-    }
-  }
-  if (currentView === "play") {
-    updateActivePlayerBanner();
-  } else if (currentView === "training") {
-    if (elements.trainingCard) {
-      elements.trainingCard.hidden = false;
-    }
+      updateActivePlayerBanner();
+    } else if (currentView === "tv") {
+      renderDartboardPicker();
+    } else if (currentView === "training") {
+      if (elements.trainingCard) {
+        elements.trainingCard.hidden = false;
+      }
     renderTrainingView();
   } else if (currentView === "tournament") {
     renderTournamentBracket();
@@ -5579,15 +5610,17 @@ function restoreLayoutModePreference() {
   updateLayoutToggleButtons();
 }
 
-function applyLayoutMode() {
-  if (!document.body) return;
-  document.body.classList.remove("layout-desktop", "layout-mobile");
-  if (gameState.layoutMode === "desktop") {
-    document.body.classList.add("layout-desktop");
-  } else if (gameState.layoutMode === "mobile") {
-    document.body.classList.add("layout-mobile");
+  function applyLayoutMode() {
+    if (!document.body) return;
+    document.body.classList.remove("layout-desktop", "layout-mobile", "layout-auto");
+    if (gameState.layoutMode === "desktop") {
+      document.body.classList.add("layout-desktop");
+    } else if (gameState.layoutMode === "mobile") {
+      document.body.classList.add("layout-mobile");
+    } else {
+      document.body.classList.add("layout-mobile");
+    }
   }
-}
 
 function updateLayoutToggleButtons() {
   if (!elements.layoutToggleButtons?.length) return;

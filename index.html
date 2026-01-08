@@ -32,6 +32,7 @@
           <div class="view-toggle" role="group" aria-label="Ansicht wählen">
             <button type="button" class="view-toggle-btn active" data-view="setup">Konfiguration</button>
             <button type="button" class="view-toggle-btn" data-view="play">Spielansicht</button>
+            <button type="button" class="view-toggle-btn" data-view="tv">TV</button>
             <button type="button" class="view-toggle-btn" data-view="training">Training</button>
             <button type="button" class="view-toggle-btn" data-view="camera">Kamera</button>
             <button type="button" class="view-toggle-btn" data-view="tournament">Turnier</button>
@@ -337,7 +338,9 @@
         <h3 id="quick-select-title">Schnellauswahl</h3>
         <div id="dart-picker" class="dart-picker" aria-label="Dart-Schnellauswahl für Single, Double, Triple und Bull">
           <div id="dart-number-grid" class="dart-grid dart-numbers" aria-label="Zahlenfelder"></div>
-          <div id="dartboard-picker" class="dartboard-picker" hidden aria-label="Dartboard Darstellung"></div>
+          <div id="dartboard-picker" class="dartboard-picker" hidden aria-label="Dartboard Darstellung">
+            <div class="tv-zero-ring" aria-hidden="true"></div>
+          </div>
           <div class="dart-grid dart-bull">
             <button class="dart-button" data-label="SB" data-readable="Single Bull" data-score="25" data-multiplier="1"
               data-double="false">
