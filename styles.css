@@ -406,10 +406,6 @@ body.leaderboard-view .leaderboard-card {
   grid-column: 1 / -1;
 }
 
-.tv-zero-ring {
-  display: none;
-}
-
 .tv-view .app-main,
 body.tv-view .app-main {
   width: min(1800px, 98vw);
@@ -487,12 +483,14 @@ body.tv-view .scoreboard-grid {
 .tv-view .scoreboard-quick h3,
 .tv-view .dart-number-order,
 .tv-view #dart-number-grid,
+.tv-view .dart-bull,
 .tv-view .hot-board,
 .tv-view .dart-mode-switch,
 .tv-view .dart-combos,
 body.tv-view .scoreboard-quick h3,
 body.tv-view .dart-number-order,
 body.tv-view #dart-number-grid,
+body.tv-view .dart-bull,
 body.tv-view .hot-board,
 body.tv-view .dart-mode-switch,
 body.tv-view .dart-combos {
@@ -507,14 +505,6 @@ body.tv-view .dart-picker {
   gap: 0.85rem;
 }
 
-.tv-view .dart-bull,
-body.tv-view .dart-bull {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(90px, 1fr));
-  gap: 0.6rem;
-  order: 1;
-}
-
 .tv-view #dartboard-picker,
 .tv-view #dartboard-picker[hidden],
 body.tv-view #dartboard-picker,
@@ -526,35 +516,15 @@ body.tv-view #dartboard-picker[hidden] {
   padding: clamp(16px, 3vw, 32px);
   position: relative;
   order: 2;
+  overflow: visible;
 }
 
 .tv-view #dartboard-picker svg,
 body.tv-view #dartboard-picker svg {
   position: relative;
-  z-index: 2;
+  z-index: 3;
 }
 
-.tv-view .tv-zero-ring,
-body.tv-view .tv-zero-ring {
-  display: block;
-  position: absolute;
-  inset: calc(clamp(16px, 3vw, 32px) - 80px);
-  border-radius: 50%;
-  border: none;
-  background: rgba(245, 202, 52, 0.35);
-  -webkit-mask: radial-gradient(
-    closest-side,
-    transparent calc(100% - 80px),
-    #000 calc(100% - 80px)
-  );
-  mask: radial-gradient(
-    closest-side,
-    transparent calc(100% - 80px),
-    #000 calc(100% - 80px)
-  );
-  z-index: 3;
-  pointer-events: none;
-}
 
 @media (max-width: 1100px) {
   .tv-view .scoreboard,
@@ -1640,6 +1610,7 @@ button.ghost {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  position: relative;
 }
 
 .player-card-heatmap {
@@ -2087,6 +2058,34 @@ body.play-view .player-card.active {
   white-space: normal;
 }
 
+.player-card.has-checkout .player-header {
+  padding-right: 5.5rem;
+}
+
+.player-card.has-checkout .player-checkout-wrapper {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.65rem;
+  background: rgba(36, 85, 245, 0.08);
+  border: 1px solid rgba(36, 85, 245, 0.2);
+  text-align: right;
+}
+
+.player-card.has-checkout .player-checkout-wrapper dt {
+  margin: 0;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.player-card.has-checkout .player-checkout-wrapper dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+}
+
 .play-view .player-checkout-wrapper dd,
 body.play-view .player-checkout-wrapper dd {
   font-size: 1.5rem;
@@ -2325,9 +2324,12 @@ body:not(.sets-mode) .player-legs-wrapper {
 
 .tv-view .dartboard-zero-ring,
 body.tv-view .dartboard-zero-ring {
-  display: inline;
-  stroke: rgba(245, 202, 52, 0.8);
-  stroke-width: 10;
+  display: none;
+}
+
+.dartboard-zero-area {
+  cursor: pointer;
+  pointer-events: visibleFill;
 }
 
 .dartboard-segment.single {

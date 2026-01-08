@@ -1677,22 +1677,50 @@ function onHotNumberGridClick(event) {
 function onDartboardPickerClick(event) {
   if (!gameState.legActive) return;
   const segment = event.target.closest("[data-dart-segment]");
-  if (!segment || segment.hasAttribute("hidden")) return;
+  if (segment && !segment.hasAttribute("hidden")) {
+    const score = parseInt(segment.dataset.score || "0", 10);
+    const multiplier = parseInt(segment.dataset.multiplier || "1", 10);
+    const readable = segment.dataset.readable || segment.dataset.label || segment.textContent || "";
+    const label = segment.dataset.label || readable || `${score}`;
+    const isDouble = segment.dataset.double === "true";
 
-  const score = parseInt(segment.dataset.score || "0", 10);
-  const multiplier = parseInt(segment.dataset.multiplier || "1", 10);
-  const readable = segment.dataset.readable || segment.dataset.label || segment.textContent || "";
-  const label = segment.dataset.label || readable || `${score}`;
-  const isDouble = segment.dataset.double === "true";
+    applyDart({
+      type: "dart",
+      readable,
+      dart: {
+        label,
+        score,
+        isDouble,
+        multiplier,
+      },
+    });
+    return;
+  }
+
+  if (gameState.viewMode !== "tv") return;
+  const picker = elements.dartboardPicker;
+  const svg = picker?.querySelector("svg");
+  if (!picker || !svg) return;
+
+  const rect = svg.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const dx = event.clientX - centerX;
+  const dy = event.clientY - centerY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const radius = Math.min(rect.width, rect.height) / 2;
+  const boardRadius = radius * (200 / 210);
+
+  if (distance < boardRadius) return;
 
   applyDart({
     type: "dart",
-    readable,
+    readable: "Nullwurf",
     dart: {
-      label,
-      score,
-      isDouble,
-      multiplier,
+      label: "0",
+      score: 0,
+      isDouble: false,
+      multiplier: 1,
     },
   });
 }
@@ -2154,7 +2182,7 @@ function advancePlayer() {
 
 function summarizeTurn(turn) {
   if (!turn || !turn.darts.length) return "-";
-  return turn.darts.map((dart) => shortLabelForDart(dart)).join(" · ");
+  return turn.darts.map((dart) => String(Number(dart?.score) || 0)).join("-");
 }
 
 function findBestThreeDartTurn(turns) {
@@ -2190,11 +2218,11 @@ function formatTurnPreview(turn) {
   if (!turn || !Array.isArray(turn.darts) || !turn.darts.length) {
     return "-";
   }
-  const labels = turn.darts.map((dart) => shortLabelForDart(dart));
+  const labels = turn.darts.map((dart) => String(Number(dart?.score) || 0));
   while (labels.length < MAX_DARTS_PER_TURN) {
-    labels.push("–");
+    labels.push("-");
   }
-  return labels.join(" · ");
+  return labels.join("-");
 }
 
 function render() {
@@ -2298,11 +2326,13 @@ function renderScoreboard() {
         checkoutNode.dataset.state = "ready";
         checkoutNode.title = `Empfohlener Checkout: ${suggestion}`;
         checkoutWrapper.hidden = false;
+        node.classList.add("has-checkout");
       } else {
         checkoutNode.textContent = "";
         checkoutNode.dataset.state = "none";
         checkoutNode.removeAttribute("title");
         checkoutWrapper.hidden = true;
+        node.classList.remove("has-checkout");
       }
     }
 
@@ -2350,7 +2380,7 @@ function computeCheckoutSuggestion(score, requiresDouble) {
   if (!combos.length) {
     return "";
   }
-  return combos[0].map((shot) => shot.display).join(" · ");
+  return combos[0].map((shot) => String(shot.score)).join(" · ");
 }
 
 function renderActivePlayerHeatmap() {
@@ -3488,7 +3518,41 @@ function renderDartboardPicker() {
   background.setAttribute("fill", "#0f172a");
   svg.appendChild(background);
 
-  const zeroRingRadius = isTvView ? 205 : 203;
+  if (isTvView) {
+    const outer = 210;
+    const inner = 200;
+    const zeroArea = document.createElementNS(svgNS, "path");
+    zeroArea.setAttribute(
+      "d",
+      [
+        `M ${-outer} ${-outer}`,
+        `H ${outer}`,
+        `V ${outer}`,
+        `H ${-outer}`,
+        "Z",
+        `M 0 ${-inner}`,
+        `A ${inner} ${inner} 0 1 0 0 ${inner}`,
+        `A ${inner} ${inner} 0 1 0 0 ${-inner}`,
+        "Z",
+      ].join(" "),
+    );
+    zeroArea.setAttribute("fill-rule", "evenodd");
+    zeroArea.setAttribute("clip-rule", "evenodd");
+    zeroArea.setAttribute("fill", "#82caff");
+    zeroArea.setAttribute("fill-opacity", "0.25");
+    zeroArea.setAttribute("stroke", "none");
+    zeroArea.setAttribute("class", "dartboard-zero-area");
+    zeroArea.dataset.dartSegment = "true";
+    zeroArea.dataset.number = "0";
+    zeroArea.dataset.multiplier = "1";
+    zeroArea.dataset.score = "0";
+    zeroArea.dataset.label = "0";
+    zeroArea.dataset.readable = "Nullwurf";
+    zeroArea.dataset.double = "false";
+    svg.appendChild(zeroArea);
+  }
+
+  const zeroRingRadius = isTvView ? 212 : 203;
   const zeroRing = document.createElementNS(svgNS, "circle");
   zeroRing.setAttribute("cx", "0");
   zeroRing.setAttribute("cy", "0");
@@ -3512,17 +3576,19 @@ function renderDartboardPicker() {
   const innerSingleColors = ["#273447", "#1c2433"];
 
   const bullMultiplier = isTvView ? 2 : 1;
+  const bullOuter = 20 * bullMultiplier;
+  const bullInner = 7 * bullMultiplier;
   const radii = {
     doubleOuter: 200,
     doubleInner: 173,
     singleOuterOuter: 171,
     singleOuterInner: 113,
     tripleOuter: 111,
-    tripleInner: 93,
-    singleInnerOuter: 91,
-    singleInnerInner: 45,
-    outerBull: 20 * bullMultiplier,
-    innerBull: 7 * bullMultiplier,
+    tripleInner: 60,
+    singleInnerOuter: 58,
+    singleInnerInner: bullOuter + 2,
+    outerBull: bullOuter,
+    innerBull: bullInner,
   };
 
   const segmentAngle = 360 / DARTBOARD_NUMBERS.length;
