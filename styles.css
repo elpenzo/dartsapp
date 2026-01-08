@@ -538,7 +538,7 @@ body.tv-view #dartboard-picker svg {
 body.tv-view .tv-zero-ring {
   display: block;
   position: absolute;
-  inset: 0;
+  inset: calc(clamp(16px, 3vw, 32px) - 80px);
   border-radius: 50%;
   border: none;
   background: rgba(245, 202, 52, 0.35);
@@ -2327,7 +2327,7 @@ body:not(.sets-mode) .player-legs-wrapper {
 body.tv-view .dartboard-zero-ring {
   display: inline;
   stroke: rgba(245, 202, 52, 0.8);
-  stroke-width: 30;
+  stroke-width: 10;
 }
 
 .dartboard-segment.single {
