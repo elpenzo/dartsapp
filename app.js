@@ -2241,6 +2241,15 @@ const CHECKOUT_SHOTS = createCheckoutShotCatalog();
 const CHECKOUT_DOUBLE_SHOTS = CHECKOUT_SHOTS.filter((shot) => shot.isDouble);
 const CHECKOUT_CACHE = new Map();
 
+function openProfileDetail(profileUrl) {
+  if (!profileUrl) return;
+  if (gameState.legActive) {
+    window.open(profileUrl, "_blank", "noopener");
+    return;
+  }
+  window.location.href = profileUrl;
+}
+
 function renderScoreboard() {
   const matchConfig = getCurrentMatchConfig();
   const isSetsMode = isSetsModeActive(matchConfig);
@@ -2279,12 +2288,12 @@ function renderScoreboard() {
       nameNode.setAttribute("role", "link");
       nameNode.tabIndex = 0;
       nameNode.addEventListener("click", () => {
-        window.location.href = profileUrl;
+        openProfileDetail(profileUrl);
       });
       nameNode.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          window.location.href = profileUrl;
+          openProfileDetail(profileUrl);
         }
       });
     }
