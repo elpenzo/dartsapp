@@ -2273,6 +2273,21 @@ function renderScoreboard() {
 
     const displayName = getPlayerDisplayName(player);
     nameNode.textContent = displayName;
+    const profileUrl = getProfileDetailUrl(player.profileId);
+    if (profileUrl) {
+      nameNode.classList.add("is-link");
+      nameNode.setAttribute("role", "link");
+      nameNode.tabIndex = 0;
+      nameNode.addEventListener("click", () => {
+        window.location.href = profileUrl;
+      });
+      nameNode.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          window.location.href = profileUrl;
+        }
+      });
+    }
     if (metaNode) {
       const fullName = player.fullName && player.fullName !== displayName ? player.fullName : "";
       metaNode.textContent = fullName;
@@ -6738,6 +6753,11 @@ function getProfileDisplayName(profile) {
   return `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || "Unbenannt";
 }
 
+function getProfileDetailUrl(profileId) {
+  if (!profileId) return "";
+  return `profile.html?id=${encodeURIComponent(profileId)}`;
+}
+
 function getPlayerDisplayName(player) {
   if (!player) return "";
   const value = (player.displayName || player.name || "").toString().trim();
@@ -6890,9 +6910,16 @@ function renderLeaderboard() {
 
     const nameWrapper = document.createElement("div");
     nameWrapper.className = "leaderboard-player-text";
-    const nicknameEl = document.createElement("span");
+    const nicknameEl = document.createElement("button");
+    nicknameEl.type = "button";
     nicknameEl.className = "leaderboard-player-name";
     nicknameEl.textContent = displayName;
+    nicknameEl.addEventListener("click", () => {
+      const profileUrl = getProfileDetailUrl(entry.profile?.id);
+      if (profileUrl) {
+        window.location.href = profileUrl;
+      }
+    });
     nameWrapper.appendChild(nicknameEl);
     if (entry.fullName) {
       const fullNameEl = document.createElement("span");
@@ -7851,5 +7878,3 @@ function formatProfileDate(value) {
     return "";
   }
 }
-
-

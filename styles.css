@@ -714,8 +714,19 @@ body.tv-view #dartboard-picker svg {
 }
 
 .leaderboard-player-name {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
   font-weight: 600;
   color: var(--text);
+  cursor: pointer;
+}
+
+.leaderboard-player-name:hover,
+.leaderboard-player-name:focus-visible {
+  color: var(--primary);
 }
 
 .leaderboard-player-full {
@@ -1974,6 +1985,18 @@ button.ghost {
 
 .player-name-wrapper h3 {
   margin: 0;
+}
+
+.player-name.is-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(36, 85, 245, 0.35);
+  text-underline-offset: 0.2rem;
+}
+
+.player-name.is-link:hover,
+.player-name.is-link:focus-visible {
+  color: var(--primary);
 }
 
 .player-meta {
