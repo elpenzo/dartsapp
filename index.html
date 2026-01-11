@@ -5,6 +5,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Darts Voice Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800&family=Rajdhani:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="styles.css" />
 </head>
 
@@ -21,12 +27,25 @@
         aria-expanded="false"
         aria-controls="main-menu"
       >
-        <span class="burger-line"></span>
-        <span class="burger-line"></span>
-        <span class="burger-line"></span>
+        <span class="menu-trigger-icon" aria-hidden="true">
+          <span class="burger-line"></span>
+          <span class="burger-line"></span>
+          <span class="burger-line"></span>
+        </span>
+        <span class="menu-trigger-text" aria-hidden="true">
+          <span class="menu-trigger-title">Menu</span>
+          <span class="menu-trigger-meta">Control</span>
+        </span>
         <span class="sr-only">Hauptmenü öffnen</span>
       </button>
       <div id="main-menu" class="main-menu" aria-hidden="true">
+        <div class="main-menu-head">
+          <div>
+            <p class="main-menu-eyebrow">Control Center</p>
+            <p class="main-menu-title">Match Systems</p>
+          </div>
+          <span class="main-menu-pill">2026</span>
+        </div>
         <div class="main-menu-section">
           <p class="main-menu-label">Ansicht</p>
           <div class="view-toggle" role="group" aria-label="Ansicht wählen">
