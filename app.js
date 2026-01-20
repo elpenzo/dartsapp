@@ -1930,11 +1930,15 @@ function applyDart(interpretation) {
   if (!normalizedDart) return;
   const readableLabel = interpretation.readable || normalizedDart.label;
 
-  if (remaining < 0 || (remaining === 0 && requiresDouble && !dart.isDouble)) {
-    const reason =
-      remaining === 0 && requiresDouble && !dart.isDouble
-        ? `${readableLabel} - Double benötigt`
-        : readableLabel;
+  const doubleOutBust =
+    requiresDouble && (remaining === 1 || (remaining === 0 && !dart.isDouble));
+
+  if (remaining < 0 || doubleOutBust) {
+    const reason = doubleOutBust
+      ? remaining === 1
+        ? `${readableLabel} - Rest 1`
+        : `${readableLabel} - Double benötigt`
+      : readableLabel;
     registerBust(reason);
     return;
   }
@@ -1968,8 +1972,10 @@ function applyTurnResult(result) {
   const remaining = scoreBefore - result.score;
   const requiresDouble = requiresDoubleCheckout();
 
-  if (remaining < 0) {
-    registerBust(result.label);
+  if (remaining < 0 || (requiresDouble && remaining === 1)) {
+    const reason =
+      requiresDouble && remaining === 1 ? `${result.label} - Rest 1` : result.label;
+    registerBust(reason);
     return;
   }
 
