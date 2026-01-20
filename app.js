@@ -1411,6 +1411,7 @@ function startGame(
       doubleHitsThisGame: 0,
       checkoutAttemptsThisGame: 0,
       checkoutHitsThisGame: 0,
+      lastGameSummary: null,
       statsHistory: [],
       legsThisSet: 0,
       totalLegsWon: 0,
@@ -2221,6 +2222,34 @@ function findBestThreeDartTurn(turns) {
   return best;
 }
 
+function buildGameSummary(player) {
+  if (!player) return null;
+  const points = Number(player.totalPointsThisGame) || 0;
+  const darts = Number(player.totalDartsThisGame) || 0;
+  const averagePerDart = darts > 0 ? points / darts : 0;
+  const bestTurn = findBestThreeDartTurn(player.history);
+  return {
+    points,
+    darts,
+    threeDartAverage: averagePerDart * 3,
+    bestTurn: bestTurn
+      ? { total: bestTurn.total, labels: bestTurn.labels, dartsUsed: bestTurn.dartsUsed }
+      : null,
+  };
+}
+
+function formatBestTurnSummary(bestTurn) {
+  if (!bestTurn) return "-";
+  const total = Number(bestTurn.total) || 0;
+  const labels = Array.isArray(bestTurn.labels)
+    ? bestTurn.labels.map((label) => (label != null ? String(label) : "")).filter(Boolean)
+    : [];
+  if (!labels.length) {
+    return String(total);
+  }
+  return `${total} (${labels.join(" ")})`;
+}
+
 function formatTurnPreview(turn) {
   if (!turn || !Array.isArray(turn.darts) || !turn.darts.length) {
     return "-";
@@ -2280,6 +2309,8 @@ function renderScoreboard() {
     const scoreNode = fragment.querySelector(".player-score");
     const threeDartNode = fragment.querySelector(".player-three-dart");
     const lastNode = fragment.querySelector(".player-last");
+    const bestSetWrapper = fragment.querySelector(".player-best-set-wrapper");
+    const bestSetNode = fragment.querySelector(".player-best-set");
     const setsNode = fragment.querySelector(".player-sets");
     const legsNode = fragment.querySelector(".player-legs");
     const checkoutNode = fragment.querySelector(".player-checkout");
@@ -2329,10 +2360,19 @@ function renderScoreboard() {
     scoreNode.textContent = player.score;
     lastNode.textContent = player.lastTurn || "-";
     if (threeDartNode) {
-      const dartsThrown = Number(player.totalDartsThisGame) || 0;
-      const pointsScored = Number(player.totalPointsThisGame) || 0;
+      const summary = gameState.matchCompleted ? player.lastGameSummary : null;
+      const dartsThrown = summary ? Number(summary.darts) || 0 : Number(player.totalDartsThisGame) || 0;
+      const pointsScored = summary ? Number(summary.points) || 0 : Number(player.totalPointsThisGame) || 0;
       const averageValue = dartsThrown > 0 ? pointsScored / dartsThrown : 0;
       threeDartNode.textContent = dartsThrown > 0 ? (averageValue * 3).toFixed(2) : "0.00";
+    }
+    if (bestSetWrapper && bestSetNode) {
+      if (gameState.matchCompleted) {
+        bestSetWrapper.hidden = false;
+        bestSetNode.textContent = formatBestTurnSummary(player.lastGameSummary?.bestTurn);
+      } else {
+        bestSetWrapper.hidden = true;
+      }
     }
     if (heatmapOverlay) {
       const { svgMarkup } = generateHeatmapSvgMarkup(player.dartHitsThisGame);
@@ -4117,6 +4157,9 @@ function finalizeGameStats() {
   let updated = false;
 
   gameState.players.forEach((player) => {
+    const summary = buildGameSummary(player);
+    player.lastGameSummary = summary;
+
     if (!player.profileId) return;
     const profile = getProfileById(player.profileId);
     if (!profile) return;
@@ -4167,7 +4210,7 @@ function finalizeGameStats() {
       dartHistogram: entryHistogram,
     };
 
-    const bestTurn = findBestThreeDartTurn(player.history);
+    const bestTurn = summary?.bestTurn;
     if (bestTurn) {
       entry.bestTurn = {
         total: bestTurn.total,
