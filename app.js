@@ -1,4 +1,4 @@
-﻿const DEFAULT_STARTING_SCORE = 501;
+const DEFAULT_STARTING_SCORE = 501;
 const DEFAULT_OUT_MODE = "single";
 const MAX_DARTS_PER_TURN = 3;
 const MULTIPLIER_CONFIG = {
@@ -2405,7 +2405,26 @@ function computeCheckoutSuggestion(score, requiresDouble) {
   if (!combos.length) {
     return "";
   }
-  return combos[0].map((shot) => String(shot.score)).join(" · ");
+  return combos
+    .slice(0, 3)
+    .map((combo) => formatCheckoutCombo(combo))
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function formatCheckoutCombo(combo) {
+  if (!combo || !combo.length) return "";
+  return combo.map((shot) => formatCheckoutShotLabel(shot)).filter(Boolean).join(" ");
+}
+
+function formatCheckoutShotLabel(shot) {
+  if (!shot) return "";
+  if (shot.kind === "DB") return "DB25";
+  if (shot.kind === "SB") return "SB25";
+  if (shot.kind === "D") return `D${shot.base}`;
+  if (shot.kind === "T") return `T${shot.base}`;
+  if (shot.kind === "S") return `S${shot.base}`;
+  return shot.display || String(shot.score);
 }
 
 function renderActivePlayerHeatmap() {
@@ -7887,3 +7906,4 @@ function formatProfileDate(value) {
     return "";
   }
 }
+
