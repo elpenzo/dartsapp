@@ -53,6 +53,12 @@ const TRAINING_121_PENALTY = 10;
 const TRAINING_RANDOM_MIN_TARGET = 2;
 const TRAINING_RANDOM_MAX_TARGET = 61;
 const TRAINING_RANDOM_MAX_DARTS = 3;
+const BOBS27_START_SCORE = 27;
+const BOBS27_DARTS_PER_TARGET = 3;
+const BOBS27_TARGETS = [
+  ...Array.from({ length: 20 }, (_, index) => `D${index + 1}`),
+  "DB",
+];
 const TRAINING_VARIANTS_BY_MODE = {
   around: [
     {
@@ -110,6 +116,13 @@ const TRAINING_MODES = {
     description:
       "Double-Training mit festen Leitern: 32-16-8, 40-20-10 oder 12-6-3.",
     supportsVariants: true,
+  },
+  bobs27: {
+    id: "bobs27",
+    label: "Bob's 27",
+    description:
+      "Bobs 27: Starte bei 27 Punkten, spiele D1 bis D20 und Bull. Treffer addieren das Double, ohne Treffer wird das Double abgezogen.",
+    supportsVariants: false,
   },
   randomCheckout: {
     id: "randomCheckout",
@@ -566,7 +579,7 @@ function createTrainingPlayerState(config = {}) {
   const fallback = typeof config.fallback === "string" && config.fallback.trim()
     ? config.fallback.trim()
     : `Spieler ${slot + 1}`;
-  const customHistory = { around: [], game121: [], doubles: [], randomCheckout: [] };
+  const customHistory = { around: [], game121: [], doubles: [], bobs27: [], randomCheckout: [] };
   return {
     slot,
     name: fallback,
@@ -583,6 +596,9 @@ function createTrainingPlayerState(config = {}) {
     attemptDarts: 0,
     attempts: 0,
     successes: 0,
+    score: BOBS27_START_SCORE,
+    targetHits: 0,
+    misses: 0,
     history: customHistory,
     customHistory,
   };
@@ -5057,6 +5073,9 @@ function ensureTrainingHistoryContainer(container) {
   if (!Array.isArray(history.doubles)) {
     history.doubles = [];
   }
+  if (!Array.isArray(history.bobs27)) {
+    history.bobs27 = [];
+  }
   if (!Array.isArray(history.randomCheckout)) {
     history.randomCheckout = [];
   }
@@ -5112,6 +5131,7 @@ function loadProfileTrainingHistoryIntoPlayer(player, profile) {
     around: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.around.id),
     game121: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.game121.id),
     doubles: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.doubles.id),
+    bobs27: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.bobs27.id),
     randomCheckout: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.randomCheckout.id),
   };
 }
@@ -5197,6 +5217,9 @@ function renderTrainingVariantOptions(mode) {
 }
 
 function getTrainingTargets(mode = gameState.training.mode) {
+  if (mode === TRAINING_MODES.bobs27.id) {
+    return BOBS27_TARGETS.slice();
+  }
   const variant = getTrainingVariantConfig(mode, gameState.training.variant);
   if (!variant) {
     return [];
@@ -5225,9 +5248,28 @@ function getRandomCheckoutTarget(previousTarget) {
   return target;
 }
 
+function getBobs27TargetValue(target) {
+  if (target === "DB") {
+    return 50;
+  }
+  if (typeof target === "string") {
+    const match = target.match(/^D(\\d+)$/);
+    if (match) {
+      return Number(match[1]) * 2;
+    }
+  }
+  return 0;
+}
+
 function describeTrainingTarget(target, variant = "long") {
   if (typeof target === "number") {
     return variant === "short" ? `${target}` : `Zahl ${target}`;
+  }
+  if (typeof target === "string") {
+    const match = target.match(/^D(\\d+)$/);
+    if (match) {
+      return variant === "short" ? `D${match[1]}` : `Double ${match[1]}`;
+    }
   }
   if (target === "SB") {
     return variant === "short" ? "SB" : "Single Bull";
@@ -5292,9 +5334,15 @@ function resetTrainingPlayerState(player, mode = gameState.training.mode) {
   player.attemptDarts = 0;
   player.attempts = 0;
   player.successes = 0;
+  player.score = BOBS27_START_SCORE;
+  player.targetHits = 0;
+  player.misses = 0;
   if (mode === TRAINING_MODES.game121.id) {
     player.currentTarget = TRAINING_121_BASE_TARGET;
     player.bestTarget = TRAINING_121_BASE_TARGET;
+  } else if (mode === TRAINING_MODES.bobs27.id) {
+    player.currentTarget = BOBS27_TARGETS[0] || null;
+    player.bestTarget = null;
   } else if (mode === TRAINING_MODES.randomCheckout.id) {
     player.currentTarget = getRandomCheckoutTarget();
     player.bestTarget = null;
@@ -5324,6 +5372,12 @@ function resetTrainingSession(options = {}) {
   const config = getTrainingModeConfig();
   if (wasActive && config.id === TRAINING_MODES.game121.id && !skipHistory) {
     gameState.training.players.forEach((player) => finalize121SessionForPlayer(player));
+  } else if (wasActive && config.id === TRAINING_MODES.bobs27.id && !skipHistory) {
+    gameState.training.players.forEach((player) => {
+      if (!player.completed) {
+        finalizeBobs27SessionForPlayer(player);
+      }
+    });
   } else if (wasActive && config.id === TRAINING_MODES.randomCheckout.id && !skipHistory) {
     gameState.training.players.forEach((player) => finalizeRandomCheckoutSessionForPlayer(player));
   }
@@ -5356,6 +5410,8 @@ function handleTrainingMissForSlot(slot) {
   const mode = getTrainingModeConfig().id;
   if (mode === TRAINING_MODES.game121.id) {
     handle121MissForPlayer(player);
+  } else if (mode === TRAINING_MODES.bobs27.id) {
+    handleBobs27MissForPlayer(player);
   } else if (mode === TRAINING_MODES.randomCheckout.id) {
     handleRandomCheckoutMissForPlayer(player);
   } else {
@@ -5375,6 +5431,9 @@ function handleTrainingHitForSlot(slot) {
   const config = getTrainingModeConfig();
   if (config.id === TRAINING_MODES.game121.id) {
     handle121HitForPlayer(player);
+  } else if (config.id === TRAINING_MODES.bobs27.id) {
+    const targets = getTrainingTargets(config.id);
+    handleBobs27HitForPlayer(player, targets);
   } else if (config.id === TRAINING_MODES.randomCheckout.id) {
     handleRandomCheckoutHitForPlayer(player);
   } else {
@@ -5451,6 +5510,78 @@ function register121FailureForPlayer(player) {
   const nextTarget = Math.max(TRAINING_121_BASE_TARGET, failedTarget - TRAINING_121_PENALTY);
   player.currentTarget = nextTarget;
   setTrainingMessage(`${player.name}: Checkout ${failedTarget} verpasst - weiter mit ${nextTarget}.`, "warning");
+}
+
+function handleBobs27MissForPlayer(player) {
+  const targets = getTrainingTargets(TRAINING_MODES.bobs27.id);
+  const currentTarget = targets[player.currentIndex] ?? null;
+  if (!currentTarget) return;
+  player.darts += 1;
+  player.attemptDarts += 1;
+  player.misses += 1;
+  if (player.attemptDarts >= BOBS27_DARTS_PER_TARGET) {
+    finalizeBobs27TargetForPlayer(player, targets);
+  } else {
+    const remaining = Math.max(0, BOBS27_DARTS_PER_TARGET - player.attemptDarts);
+    setTrainingMessage(
+      `${player.name}: Fehlwurf auf ${describeTrainingTarget(currentTarget, "short")} - noch ${remaining} Darts.`
+    );
+  }
+}
+
+function handleBobs27HitForPlayer(player, targets) {
+  const currentTarget = targets[player.currentIndex] ?? null;
+  if (!currentTarget) return;
+  const value = getBobs27TargetValue(currentTarget);
+  player.darts += 1;
+  player.attemptDarts += 1;
+  player.targetHits += 1;
+  player.hits += 1;
+  player.score += value;
+  if (player.attemptDarts >= BOBS27_DARTS_PER_TARGET) {
+    finalizeBobs27TargetForPlayer(player, targets);
+  } else {
+    const remaining = Math.max(0, BOBS27_DARTS_PER_TARGET - player.attemptDarts);
+    setTrainingMessage(
+      `${player.name}: Treffer auf ${describeTrainingTarget(currentTarget, "short")} - noch ${remaining} Darts.`
+    );
+  }
+}
+
+function finalizeBobs27TargetForPlayer(player, targets) {
+  const currentTarget = targets[player.currentIndex] ?? null;
+  if (!currentTarget) return;
+  const value = getBobs27TargetValue(currentTarget);
+  player.attempts += 1;
+  if (!player.targetHits) {
+    player.score -= value;
+  } else {
+    player.successes += 1;
+  }
+
+  const busted = player.score < 0;
+  const atEnd = player.currentIndex >= targets.length - 1;
+  if (busted || atEnd) {
+    player.completed = true;
+    player.active = false;
+    finalizeBobs27SessionForPlayer(player);
+    setTrainingMessage(
+      busted
+        ? `${player.name}: Bust bei ${player.score}.`
+        : `${player.name}: Bob's 27 abgeschlossen mit ${player.score} Punkten.`,
+      busted ? "warning" : "success"
+    );
+    updateTrainingSessionActiveState();
+    return;
+  }
+
+  player.currentIndex += 1;
+  player.currentTarget = targets[player.currentIndex] ?? null;
+  player.attemptDarts = 0;
+  player.targetHits = 0;
+  setTrainingMessage(
+    `${player.name}: Weiter mit ${describeTrainingTarget(player.currentTarget)}. Score ${player.score}.`
+  );
 }
 
 function handleRandomCheckoutMissForPlayer(player) {
@@ -5534,13 +5665,40 @@ function finalizeRandomCheckoutSessionForPlayer(player) {
   player.lastDurationMs = durationMs;
 }
 
+function finalizeBobs27SessionForPlayer(player) {
+  if (!player) return;
+  if (!player.darts && !player.attempts && !player.hits && !player.misses) {
+    player.lastDurationMs = 0;
+    return;
+  }
+  const durationMs = player.startTime ? Math.max(0, Date.now() - player.startTime) : player.lastDurationMs || 0;
+  const entry = createTrainingHistoryEntry(player, {
+    mode: TRAINING_MODES.bobs27.id,
+    label: TRAINING_MODES.bobs27.label,
+    darts: player.darts,
+    durationMs,
+    finishedAt: Date.now(),
+    targets: player.attempts,
+    meta: {
+      score: player.score,
+      attempts: player.attempts,
+      successes: player.successes,
+      hits: player.hits,
+      misses: player.misses,
+      busted: player.score < 0,
+    },
+  });
+  recordTrainingEntryForPlayer(player, entry);
+  player.lastDurationMs = durationMs;
+}
+
 function recordTrainingEntryForPlayer(player, entry) {
   if (!player || !entry) return;
   ensureTrainingPlayerStateShape(player);
   const mode = entry.mode;
   if (player.profileId) {
     if (!player.history || typeof player.history !== "object") {
-      player.history = { around: [], game121: [], doubles: [], randomCheckout: [] };
+      player.history = { around: [], game121: [], doubles: [], bobs27: [], randomCheckout: [] };
     }
     if (!Array.isArray(player.history[mode])) {
       player.history[mode] = [];
@@ -5578,8 +5736,11 @@ function renderTrainingView() {
   const config = getTrainingModeConfig();
   const is121Mode = config.id === TRAINING_MODES.game121.id;
   const isRandomMode = config.id === TRAINING_MODES.randomCheckout.id;
+  const isBobs27Mode = config.id === TRAINING_MODES.bobs27.id;
   const isTargetListMode =
-    config.id === TRAINING_MODES.around.id || config.id === TRAINING_MODES.doubles.id;
+    config.id === TRAINING_MODES.around.id ||
+    config.id === TRAINING_MODES.doubles.id ||
+    config.id === TRAINING_MODES.bobs27.id;
   const targets = isTargetListMode ? getTrainingTargets(config.id) : [];
   const totalTargets = targets.length;
 
@@ -5612,6 +5773,7 @@ function renderTrainingView() {
       config,
       is121Mode,
       isRandomMode,
+      isBobs27Mode,
       targets,
       totalTargets,
     });
@@ -5672,6 +5834,37 @@ function renderTrainingPlayerView(player, context) {
     if (ui.targetGrid) {
       ui.targetGrid.hidden = true;
       ui.targetGrid.innerHTML = "";
+    }
+  } else if (context.isBobs27Mode) {
+    const currentIndex = Math.min(player.currentIndex, context.totalTargets);
+    const currentTarget = context.targets[currentIndex] ?? null;
+    const score = Number.isFinite(player.score) ? player.score : BOBS27_START_SCORE;
+    if (ui.targetLabel) {
+      if (player.completed) {
+        ui.targetLabel.textContent = score < 0 ? "Bust!" : "Geschafft!";
+      } else if (currentTarget != null) {
+        ui.targetLabel.textContent = describeTrainingTarget(currentTarget);
+      } else {
+        ui.targetLabel.textContent = "-";
+      }
+    }
+    if (ui.targetMeta) {
+      const remaining = Math.max(0, BOBS27_DARTS_PER_TARGET - player.attemptDarts);
+      if (player.completed) {
+        ui.targetMeta.textContent = score < 0 ? `Bust bei ${score}` : `Endstand ${score}`;
+      } else {
+        ui.targetMeta.textContent = `Score ${score} | Noch ${remaining} Darts`;
+      }
+    }
+    if (ui.progressTitle) {
+      ui.progressTitle.textContent = "Score";
+    }
+    if (ui.progressLabel) {
+      ui.progressLabel.textContent = `${score}`;
+    }
+    if (ui.targetGrid) {
+      ui.targetGrid.hidden = false;
+      renderTrainingTargetGrid(context.targets, currentIndex, ui.targetGrid);
     }
   } else {
     const currentIndex = Math.min(player.currentIndex, context.totalTargets);
@@ -5770,6 +5963,10 @@ function renderTrainingHistoryForPlayer(player, mode, listElement) {
       const successes = entry.meta?.successes ?? 0;
       const attempts = entry.meta?.attempts ?? entry.targets ?? 0;
       targetMeta.textContent = `Checkouts ${successes} / ${attempts}`;
+    } else if (entry.mode === TRAINING_MODES.bobs27.id) {
+      const score = Number.isFinite(entry.meta?.score) ? entry.meta.score : 0;
+      const busted = entry.meta?.busted;
+      targetMeta.textContent = busted ? `Bust bei ${score}` : `Score ${score}`;
     } else {
       const variantLabel = entry.meta?.variant ? ` · ${entry.meta.variant}` : "";
       targetMeta.textContent = `${entry.targets} Ziele${variantLabel}`;
@@ -5785,6 +5982,12 @@ function renderTrainingHistoryForPlayer(player, mode, listElement) {
       const attempts = entry.meta?.attempts ?? 0;
       metaParts.push(`${successes} Checkouts`);
       metaParts.push(`${attempts} Versuche`);
+    }
+    if (entry.mode === TRAINING_MODES.bobs27.id) {
+      const hits = entry.meta?.hits ?? 0;
+      const attempts = entry.meta?.attempts ?? entry.targets ?? 0;
+      metaParts.push(`${hits} Treffer`);
+      metaParts.push(`${attempts} Ziele`);
     }
     if (entry.mode === TRAINING_MODES.randomCheckout.id) {
       const successes = entry.meta?.successes ?? 0;
