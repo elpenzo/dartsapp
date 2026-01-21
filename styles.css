@@ -3058,6 +3058,13 @@ body.tv-view .dartboard-zero-ring {
   box-shadow: 0 18px 40px rgba(23, 32, 54, 0.12);
 }
 
+.profile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .profile-back-link {
   color: var(--text);
   text-decoration: none;

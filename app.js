@@ -1305,7 +1305,12 @@ async function initialize() {
   await refreshProfileStorageInfo({ silent: true });
   await reloadProfilesFromServer();
 
-  updateViewModeUI();
+  const initialView = getInitialViewFromUrl();
+  if (initialView) {
+    setViewMode(initialView);
+  } else {
+    updateViewModeUI();
+  }
 
   if (!speechEngine.supported) {
     elements.voiceStatus.textContent = "Nicht unterstützt";
@@ -4287,7 +4292,7 @@ function finalizeGameStats() {
   saveProfiles();
 }
 
-  function setViewMode(view) {
+function setViewMode(view) {
     const allowedViews = ["setup", "play", "tv", "training", "camera", "tournament", "profiles", "leaderboard"];
   const normalized = allowedViews.includes(view) ? view : "setup";
   if (gameState.viewMode === normalized) {
@@ -4317,6 +4322,15 @@ function finalizeGameStats() {
     requestAnimationFrame(() => {
       elements.cameraCard?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
+  }
+}
+
+function getInitialViewFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get("view") || "").trim();
+  } catch (_error) {
+    return "";
   }
 }
 
