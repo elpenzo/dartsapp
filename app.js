@@ -53,22 +53,41 @@ const TRAINING_121_PENALTY = 10;
 const TRAINING_RANDOM_MIN_TARGET = 2;
 const TRAINING_RANDOM_MAX_TARGET = 61;
 const TRAINING_RANDOM_MAX_DARTS = 3;
-const TRAINING_VARIANTS = {
-  boardClockwise: {
-    id: "boardClockwise",
-    label: "Rundlauf linksrum",
-    build: () => CLOCKWISE_AROUND_ORDER.slice(),
-  },
-  boardCounter: {
-    id: "boardCounter",
-    label: "Rundlauf rechtsrum",
-    build: () => COUNTER_AROUND_ORDER.slice(),
-  },
-  numeric: {
-    id: "numeric",
-    label: "Numerisch 1-20",
-    build: () => NUMERIC_AROUND_ORDER.slice(),
-  },
+const TRAINING_VARIANTS_BY_MODE = {
+  around: [
+    {
+      id: "boardClockwise",
+      label: "Rundlauf linksrum",
+      build: () => CLOCKWISE_AROUND_ORDER.slice(),
+    },
+    {
+      id: "boardCounter",
+      label: "Rundlauf rechtsrum",
+      build: () => COUNTER_AROUND_ORDER.slice(),
+    },
+    {
+      id: "numeric",
+      label: "Numerisch 1-20",
+      build: () => NUMERIC_AROUND_ORDER.slice(),
+    },
+  ],
+  doubles: [
+    {
+      id: "doubles32168",
+      label: "Doubles 32-16-8",
+      build: () => ["D32", "D16", "D8"],
+    },
+    {
+      id: "doubles402010",
+      label: "Doubles 40-20-10",
+      build: () => ["D40", "D20", "D10"],
+    },
+    {
+      id: "doubles1263",
+      label: "Doubles 12-6-3",
+      build: () => ["D12", "D6", "D3"],
+    },
+  ],
 };
 const TRAINING_MODES = {
   around: {
@@ -84,6 +103,13 @@ const TRAINING_MODES = {
     description:
       "Checkout-Challenge: Starte bei 121 Punkten, erledige das Leg in bis zu 9 Darts. Erfolg erhöht das Ziel, ein Fehlschlag zieht 10 Punkte ab.",
     supportsVariants: false,
+  },
+  doubles: {
+    id: "doubles",
+    label: "Doubles",
+    description:
+      "Double-Training mit festen Leitern: 32-16-8, 40-20-10 oder 12-6-3.",
+    supportsVariants: true,
   },
   randomCheckout: {
     id: "randomCheckout",
@@ -540,7 +566,7 @@ function createTrainingPlayerState(config = {}) {
   const fallback = typeof config.fallback === "string" && config.fallback.trim()
     ? config.fallback.trim()
     : `Spieler ${slot + 1}`;
-  const customHistory = { around: [], game121: [], randomCheckout: [] };
+  const customHistory = { around: [], game121: [], doubles: [], randomCheckout: [] };
   return {
     slot,
     name: fallback,
@@ -5028,6 +5054,9 @@ function ensureTrainingHistoryContainer(container) {
   if (!Array.isArray(history.game121)) {
     history.game121 = [];
   }
+  if (!Array.isArray(history.doubles)) {
+    history.doubles = [];
+  }
   if (!Array.isArray(history.randomCheckout)) {
     history.randomCheckout = [];
   }
@@ -5082,6 +5111,7 @@ function loadProfileTrainingHistoryIntoPlayer(player, profile) {
   player.history = {
     around: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.around.id),
     game121: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.game121.id),
+    doubles: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.doubles.id),
     randomCheckout: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.randomCheckout.id),
   };
 }
@@ -5134,15 +5164,46 @@ function getTrainingModeConfig(mode = gameState.training.mode) {
   return TRAINING_MODES[mode] || TRAINING_MODES.around;
 }
 
+function getTrainingVariantsForMode(mode = gameState.training.mode) {
+  return TRAINING_VARIANTS_BY_MODE[mode] || [];
+}
+
+function getTrainingVariantConfig(mode, variantId) {
+  const variants = getTrainingVariantsForMode(mode);
+  if (!variants.length) return null;
+  const match = variants.find((entry) => entry.id === variantId);
+  return match || variants[0];
+}
+
+function ensureTrainingVariantForMode(mode) {
+  const variant = getTrainingVariantConfig(mode, gameState.training.variant);
+  if (variant && gameState.training.variant !== variant.id) {
+    gameState.training.variant = variant.id;
+  }
+  return variant;
+}
+
+function renderTrainingVariantOptions(mode) {
+  if (!elements.trainingVariantSelect) return;
+  const select = elements.trainingVariantSelect;
+  select.innerHTML = "";
+  const variants = getTrainingVariantsForMode(mode);
+  variants.forEach((variant) => {
+    const option = document.createElement("option");
+    option.value = variant.id;
+    option.textContent = variant.label;
+    select.appendChild(option);
+  });
+}
+
 function getTrainingTargets(mode = gameState.training.mode) {
-  if (mode !== TRAINING_MODES.around.id) {
+  const variant = getTrainingVariantConfig(mode, gameState.training.variant);
+  if (!variant) {
     return [];
   }
-  const variantId = gameState.training.variant || "boardClockwise";
-  const variant = TRAINING_VARIANTS[variantId] || TRAINING_VARIANTS.boardClockwise;
-  const base = typeof variant.build === "function" ? variant.build() : AROUND_THE_CLOCK_TARGETS.slice();
+  const base = typeof variant.build === "function" ? variant.build() : [];
   const targets = base.slice();
-  if (!targets.includes("SB")) {
+  if (mode === TRAINING_MODES.around.id && !targets.includes("SB")) {
     targets.push("SB");
   }
   return targets;
@@ -5197,6 +5258,7 @@ function setTrainingMode(mode) {
     return;
   }
   gameState.training.mode = config.id;
+  ensureTrainingVariantForMode(config.id);
   resetTrainingSession({ silent: true, skipHistory: true });
   setTrainingMessage(`${config.label} bereit. Klicke auf Training starten.`);
   renderTrainingView();
@@ -5205,13 +5267,14 @@ function setTrainingMode(mode) {
 function setTrainingVariant(variant) {
   const config = getTrainingModeConfig();
   if (!config.supportsVariants) return;
-  if (!TRAINING_VARIANTS[variant]) return;
-  if (gameState.training.variant === variant) return;
-  gameState.training.variant = variant;
+  const variantConfig = getTrainingVariantConfig(config.id, variant);
+  if (!variantConfig) return;
+  if (gameState.training.variant === variantConfig.id) return;
+  gameState.training.variant = variantConfig.id;
   resetTrainingSession();
-  setTrainingMessage(`Variante: ${TRAINING_VARIANTS[variant].label} gewählt.`);
+  setTrainingMessage(`Variante: ${variantConfig.label} gewaehlt.`);
   if (elements.trainingVariantSelect) {
-    elements.trainingVariantSelect.value = variant;
+    elements.trainingVariantSelect.value = variantConfig.id;
   }
   renderTrainingView();
 }
@@ -5345,7 +5408,7 @@ function handleAroundHitForPlayer(player, config, targets) {
       finishedAt: Date.now(),
       targets: totalTargets,
       meta: {
-        variant: TRAINING_VARIANTS[gameState.training.variant]?.label || null,
+        variant: getTrainingVariantConfig(config.id, gameState.training.variant)?.label || null,
       },
     });
     recordTrainingEntryForPlayer(player, entry);
@@ -5477,7 +5540,7 @@ function recordTrainingEntryForPlayer(player, entry) {
   const mode = entry.mode;
   if (player.profileId) {
     if (!player.history || typeof player.history !== "object") {
-      player.history = { around: [], game121: [], randomCheckout: [] };
+      player.history = { around: [], game121: [], doubles: [], randomCheckout: [] };
     }
     if (!Array.isArray(player.history[mode])) {
       player.history[mode] = [];
@@ -5515,8 +5578,9 @@ function renderTrainingView() {
   const config = getTrainingModeConfig();
   const is121Mode = config.id === TRAINING_MODES.game121.id;
   const isRandomMode = config.id === TRAINING_MODES.randomCheckout.id;
-  const isAroundMode = config.id === TRAINING_MODES.around.id;
-  const targets = isAroundMode ? getTrainingTargets(config.id) : [];
+  const isTargetListMode =
+    config.id === TRAINING_MODES.around.id || config.id === TRAINING_MODES.doubles.id;
+  const targets = isTargetListMode ? getTrainingTargets(config.id) : [];
   const totalTargets = targets.length;
 
   if (elements.trainingDescription) {
@@ -5532,8 +5596,15 @@ function renderTrainingView() {
     elements.trainingVariantField.hidden = !config.supportsVariants;
   }
   if (elements.trainingVariantSelect) {
-    elements.trainingVariantSelect.value = gameState.training.variant || "boardClockwise";
-    elements.trainingVariantSelect.disabled = !config.supportsVariants;
+    if (config.supportsVariants) {
+      const variantConfig = ensureTrainingVariantForMode(config.id);
+      renderTrainingVariantOptions(config.id);
+      elements.trainingVariantSelect.value = variantConfig?.id || "";
+      elements.trainingVariantSelect.disabled = false;
+    } else {
+      elements.trainingVariantSelect.innerHTML = "";
+      elements.trainingVariantSelect.disabled = true;
+    }
   }
 
   gameState.training.players.forEach((player) => {
