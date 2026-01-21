@@ -6910,7 +6910,8 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
     const points = Number(stats.totalPoints) || 0;
     const games = Number(stats.gamesPlayed) || 0;
     const legs = Number(stats.legsWon) || 0;
-    const sets = Number(stats.setsWon) || 0;
+    const legsWinRateValue = games > 0 ? legs / games : 0;
+    const legsWinRateLabel = formatPercentage(legs, games);
     const averageValue = darts > 0 ? points / darts : 0;
     const first12AverageValue =
       Number(stats.first12Darts) > 0 ? Number(stats.first12Points) / Number(stats.first12Darts) : 0;
@@ -6936,7 +6937,8 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
       doubleRateValue,
       doubleRateLabel: formatPercentage(stats.doubleHits || 0, darts || 0),
       legs,
-      sets,
+      legsWinRateValue,
+      legsWinRateLabel,
       games,
       hasStats: games > 0 || darts > 0,
     };
@@ -6946,11 +6948,9 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
 function compareLeaderboardEntries(a, b, sortKey = gameState.leaderboardSort) {
   if (sortKey === "legs") {
     if (b.legs !== a.legs) return b.legs - a.legs;
-    if (b.sets !== a.sets) return b.sets - a.sets;
     if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
   } else {
     if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
-    if (b.sets !== a.sets) return b.sets - a.sets;
     if (b.legs !== a.legs) return b.legs - a.legs;
   }
   if (b.games !== a.games) return b.games - a.games;
@@ -6977,8 +6977,8 @@ const LEADERBOARD_COLUMN_LABELS = {
   checkout: "Checkout %",
   triple: "Triple %",
   double: "Double %",
-  sets: "Saetze",
   legs: "Legs",
+  legsPercent: "Legs %",
   games: "Spiele",
 };
 
@@ -7096,15 +7096,15 @@ function renderLeaderboard() {
     setLeaderboardCellLabel(doubleCell, "double");
     tr.appendChild(doubleCell);
 
-    const setsCell = document.createElement("td");
-    setsCell.textContent = String(entry.sets);
-    setLeaderboardCellLabel(setsCell, "sets");
-    tr.appendChild(setsCell);
-
     const legsCell = document.createElement("td");
     legsCell.textContent = String(entry.legs);
     setLeaderboardCellLabel(legsCell, "legs");
     tr.appendChild(legsCell);
+
+    const legsPercentCell = document.createElement("td");
+    legsPercentCell.textContent = entry.legsWinRateLabel;
+    setLeaderboardCellLabel(legsPercentCell, "legsPercent");
+    tr.appendChild(legsPercentCell);
 
     const gamesCell = document.createElement("td");
     gamesCell.textContent = String(entry.games);
