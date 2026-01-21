@@ -2391,7 +2391,14 @@ function renderScoreboard() {
       legsNode.textContent = String(player.legsThisSet || 0);
     }
     if (checkoutNode && checkoutWrapper) {
-      const suggestion = getCheckoutSuggestion(player.score, gameState.outMode);
+      const isActiveTurn =
+        gameState.legActive &&
+        gameState.activeIndex === index &&
+        gameState.currentTurn?.playerId === player.id;
+      const dartsLeft = isActiveTurn
+        ? MAX_DARTS_PER_TURN - (gameState.currentTurn?.darts?.length || 0)
+        : MAX_DARTS_PER_TURN;
+      const suggestion = getCheckoutSuggestion(player.score, gameState.outMode, dartsLeft);
       if (suggestion) {
         checkoutNode.textContent = suggestion;
         checkoutNode.dataset.state = "ready";
@@ -2423,31 +2430,40 @@ function renderScoreboard() {
   renderHotNumberBoard();
 }
 
-function getCheckoutSuggestion(score, outMode = gameState.outMode) {
+function getCheckoutSuggestion(
+  score,
+  outMode = gameState.outMode,
+  dartsLeft = MAX_DARTS_PER_TURN
+) {
   const numericScore = Number(score);
   if (!Number.isFinite(numericScore)) {
     return "";
   }
+  const limitedDarts = Math.max(0, Math.min(MAX_DARTS_PER_TURN, Number(dartsLeft) || 0));
+  if (limitedDarts <= 0) {
+    return "";
+  }
   const requiresDouble = outMode === "double";
-  const cacheKey = `${requiresDouble ? "D" : "S"}:${numericScore}`;
+  const cacheKey = `${requiresDouble ? "D" : "S"}:${numericScore}:${limitedDarts}`;
   if (CHECKOUT_CACHE.has(cacheKey)) {
     return CHECKOUT_CACHE.get(cacheKey);
   }
-  const suggestion = computeCheckoutSuggestion(numericScore, requiresDouble);
+  const suggestion = computeCheckoutSuggestion(numericScore, requiresDouble, limitedDarts);
   CHECKOUT_CACHE.set(cacheKey, suggestion);
   return suggestion;
 }
 
-function computeCheckoutSuggestion(score, requiresDouble) {
+function computeCheckoutSuggestion(score, requiresDouble, dartsLeft = MAX_DARTS_PER_TURN) {
   const target = Math.trunc(score);
   if (target <= 0) {
     return "";
   }
+  const maxDarts = Math.max(1, Math.min(MAX_DARTS_PER_TURN, Number(dartsLeft) || 0));
   const maxScore = requiresDouble ? MAX_DOUBLE_OUT_CHECKOUT : MAX_SINGLE_OUT_CHECKOUT;
   if (target > maxScore) {
     return "";
   }
-  const combos = findCheckoutCombos(target, requiresDouble);
+  const combos = findCheckoutCombos(target, requiresDouble, maxDarts);
   if (!combos.length) {
     return "";
   }
@@ -2971,16 +2987,18 @@ function buildBullBreakdown(bullHits) {
   return parts.join(" · ") || "Bull";
 }
 
-function findCheckoutCombos(target, requiresDouble) {
+function findCheckoutCombos(target, requiresDouble, maxDarts = MAX_DARTS_PER_TURN) {
   const finalShots = requiresDouble ? CHECKOUT_DOUBLE_SHOTS : CHECKOUT_SHOTS;
   if (!finalShots.length) {
     return [];
   }
+  const dartLimit = Math.max(1, Math.min(MAX_DARTS_PER_TURN, Number(maxDarts) || 0));
   const minFinalScore = finalShots.reduce((min, shot) => Math.min(min, shot.score), Infinity);
   const combos = [];
   const seen = new Set();
 
   const addCombo = (combo) => {
+    if (!combo || combo.length > dartLimit) return;
     const normalized = normalizeCheckoutCombo(combo);
     const key = normalized.map((shot) => shot.id).join("|");
     if (seen.has(key)) return;
@@ -2988,36 +3006,44 @@ function findCheckoutCombos(target, requiresDouble) {
     combos.push(normalized);
   };
 
-  finalShots.forEach((finalShot) => {
-    if (finalShot.score === target) {
-      addCombo([finalShot]);
-    }
-  });
-
-  CHECKOUT_SHOTS.forEach((firstShot) => {
-    const remainingAfterFirst = target - firstShot.score;
-    if (remainingAfterFirst < minFinalScore) {
-      return;
-    }
-
+  if (dartLimit >= 1) {
     finalShots.forEach((finalShot) => {
-      if (finalShot.score === remainingAfterFirst) {
-        addCombo([firstShot, finalShot]);
+      if (finalShot.score === target) {
+        addCombo([finalShot]);
       }
     });
+  }
 
-    CHECKOUT_SHOTS.forEach((secondShot) => {
-      const remainingAfterSecond = remainingAfterFirst - secondShot.score;
-      if (remainingAfterSecond < minFinalScore) {
+  if (dartLimit >= 2) {
+    CHECKOUT_SHOTS.forEach((firstShot) => {
+      const remainingAfterFirst = target - firstShot.score;
+      if (remainingAfterFirst < minFinalScore) {
         return;
       }
+
       finalShots.forEach((finalShot) => {
-        if (finalShot.score === remainingAfterSecond) {
-          addCombo([firstShot, secondShot, finalShot]);
+        if (finalShot.score === remainingAfterFirst) {
+          addCombo([firstShot, finalShot]);
         }
       });
+
+      if (dartLimit < 3) {
+        return;
+      }
+
+      CHECKOUT_SHOTS.forEach((secondShot) => {
+        const remainingAfterSecond = remainingAfterFirst - secondShot.score;
+        if (remainingAfterSecond < minFinalScore) {
+          return;
+        }
+        finalShots.forEach((finalShot) => {
+          if (finalShot.score === remainingAfterSecond) {
+            addCombo([firstShot, secondShot, finalShot]);
+          }
+        });
+      });
     });
-  });
+  }
 
   combos.sort(compareCheckoutCombos);
   return combos;
@@ -6696,7 +6722,8 @@ function saveProfiles() {
 
 function renderProfileOptions() {
   const defaultOption = '<option value="">Benutzerdefiniert</option>';
-  const options = profiles
+  const orderedProfiles = getLeaderboardOrderedProfiles();
+  const options = orderedProfiles
     .map((profile) => {
       const displayName = getProfileDisplayName(profile);
       return `<option value="${profile.id}">${displayName}</option>`;
@@ -6815,6 +6842,7 @@ function renderProfileList() {
 
   elements.profileList.innerHTML = "";
   elements.profileList.appendChild(fragment);
+  renderProfileOptions();
   renderLeaderboard();
 }
 
@@ -6847,6 +6875,7 @@ function setLeaderboardSort(sortKey) {
   gameState.leaderboardSort = normalized;
   updateLeaderboardSortButtons();
   renderLeaderboard();
+  renderProfileOptions();
 }
 
 function updateLeaderboardSortButtons() {
@@ -6856,6 +6885,73 @@ function updateLeaderboardSortButtons() {
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
+}
+
+function buildLeaderboardEntries(sourceProfiles = profiles) {
+  if (!Array.isArray(sourceProfiles)) return [];
+  return sourceProfiles.map((profile) => {
+    ensureProfileStats(profile);
+    const stats = profile.stats || {};
+    const darts = Number(stats.totalDarts) || 0;
+    const points = Number(stats.totalPoints) || 0;
+    const games = Number(stats.gamesPlayed) || 0;
+    const legs = Number(stats.legsWon) || 0;
+    const sets = Number(stats.setsWon) || 0;
+    const averageValue = darts > 0 ? points / darts : 0;
+    const first12AverageValue =
+      Number(stats.first12Darts) > 0 ? Number(stats.first12Points) / Number(stats.first12Darts) : 0;
+    const checkoutRateValue =
+      Number(stats.checkoutAttempts) > 0 ? Number(stats.checkoutHits || 0) / Number(stats.checkoutAttempts) : 0;
+    const tripleRateValue = darts > 0 ? (Number(stats.tripleHits) || 0) / darts : 0;
+    const doubleRateValue = darts > 0 ? (Number(stats.doubleHits) || 0) / darts : 0;
+
+    return {
+      profile,
+      displayName: getProfileDisplayName(profile),
+      fullName: `${profile.firstName || ""} ${profile.lastName || ""}`.trim(),
+      averageValue,
+      threeDartAverageValue: averageValue * 3,
+      averageLabel: formatAverage(points, darts),
+      threeDartLabel: darts > 0 ? (averageValue * 3).toFixed(2) : "0.00",
+      first12AverageValue,
+      first12AverageLabel: formatAverage(stats.first12Points, stats.first12Darts),
+      checkoutRateValue,
+      checkoutRateLabel: formatPercentage(stats.checkoutHits || 0, stats.checkoutAttempts || 0),
+      tripleRateValue,
+      tripleRateLabel: formatPercentage(stats.tripleHits || 0, darts || 0),
+      doubleRateValue,
+      doubleRateLabel: formatPercentage(stats.doubleHits || 0, darts || 0),
+      legs,
+      sets,
+      games,
+      hasStats: games > 0 || darts > 0,
+    };
+  });
+}
+
+function compareLeaderboardEntries(a, b, sortKey = gameState.leaderboardSort) {
+  if (sortKey === "legs") {
+    if (b.legs !== a.legs) return b.legs - a.legs;
+    if (b.sets !== a.sets) return b.sets - a.sets;
+    if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
+  } else {
+    if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
+    if (b.sets !== a.sets) return b.sets - a.sets;
+    if (b.legs !== a.legs) return b.legs - a.legs;
+  }
+  if (b.games !== a.games) return b.games - a.games;
+  return a.displayName.localeCompare(b.displayName, "de-DE");
+}
+
+function getLeaderboardOrderedProfiles() {
+  const entries = buildLeaderboardEntries();
+  if (!entries.length) return [];
+  const sortKey = gameState.leaderboardSort;
+  const ranked = entries.filter((entry) => entry.hasStats);
+  const unranked = entries.filter((entry) => !entry.hasStats);
+  ranked.sort((a, b) => compareLeaderboardEntries(a, b, sortKey));
+  unranked.sort((a, b) => a.displayName.localeCompare(b.displayName, "de-DE"));
+  return [...ranked, ...unranked].map((entry) => entry.profile);
 }
 
 const LEADERBOARD_COLUMN_LABELS = {
@@ -6886,64 +6982,10 @@ function renderLeaderboard() {
   if (!elements.leaderboardBody || !elements.leaderboardEmpty) return;
   updateLeaderboardSortButtons();
 
-  const leaderboardEntries = profiles
-    .map((profile) => {
-      ensureProfileStats(profile);
-      const stats = profile.stats;
-      const darts = Number(stats.totalDarts) || 0;
-      const points = Number(stats.totalPoints) || 0;
-      const games = Number(stats.gamesPlayed) || 0;
-      const legs = Number(stats.legsWon) || 0;
-      const sets = Number(stats.setsWon) || 0;
-      const averageValue = darts > 0 ? points / darts : 0;
-      const first12AverageValue =
-        Number(stats.first12Darts) > 0 ? Number(stats.first12Points) / Number(stats.first12Darts) : 0;
-      const first12AverageLabel = formatAverage(stats.first12Points, stats.first12Darts);
-      const checkoutRateValue =
-        Number(stats.checkoutAttempts) > 0 ? Number(stats.checkoutHits || 0) / Number(stats.checkoutAttempts) : 0;
-      const checkoutRateLabel = formatPercentage(stats.checkoutHits || 0, stats.checkoutAttempts || 0);
-      const tripleRateValue = darts > 0 ? (Number(stats.tripleHits) || 0) / darts : 0;
-      const doubleRateValue = darts > 0 ? (Number(stats.doubleHits) || 0) / darts : 0;
-      const tripleRateLabel = formatPercentage(stats.tripleHits || 0, darts || 0);
-      const doubleRateLabel = formatPercentage(stats.doubleHits || 0, darts || 0);
-      return {
-        profile,
-        displayName: getProfileDisplayName(profile),
-        fullName: `${profile.firstName || ""} ${profile.lastName || ""}`.trim(),
-        averageValue,
-        threeDartAverageValue: averageValue * 3,
-        averageLabel: formatAverage(points, darts),
-        threeDartLabel: darts > 0 ? (averageValue * 3).toFixed(2) : "0.00",
-        first12AverageValue,
-        first12AverageLabel,
-        checkoutRateValue,
-        checkoutRateLabel,
-        tripleRateValue,
-        tripleRateLabel,
-        doubleRateValue,
-        doubleRateLabel,
-        legs,
-        sets,
-        games,
-        hasStats: games > 0 || darts > 0,
-      };
-    })
-    .filter((entry) => entry.hasStats);
+  const leaderboardEntries = buildLeaderboardEntries().filter((entry) => entry.hasStats);
 
   const sortKey = gameState.leaderboardSort;
-  leaderboardEntries.sort((a, b) => {
-    if (sortKey === "legs") {
-      if (b.legs !== a.legs) return b.legs - a.legs;
-      if (b.sets !== a.sets) return b.sets - a.sets;
-      if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
-    } else {
-      if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
-      if (b.sets !== a.sets) return b.sets - a.sets;
-      if (b.legs !== a.legs) return b.legs - a.legs;
-    }
-    if (b.games !== a.games) return b.games - a.games;
-    return a.displayName.localeCompare(b.displayName, "de-DE");
-  });
+  leaderboardEntries.sort((a, b) => compareLeaderboardEntries(a, b, sortKey));
 
   elements.leaderboardBody.innerHTML = "";
 
