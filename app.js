@@ -50,6 +50,9 @@ const AROUND_THE_CLOCK_TARGETS = [
 const TRAINING_121_BASE_TARGET = 121;
 const TRAINING_121_MAX_DARTS = 9;
 const TRAINING_121_PENALTY = 10;
+const TRAINING_RANDOM_MIN_TARGET = 2;
+const TRAINING_RANDOM_MAX_TARGET = 61;
+const TRAINING_RANDOM_MAX_DARTS = 3;
 const TRAINING_VARIANTS = {
   boardClockwise: {
     id: "boardClockwise",
@@ -80,6 +83,13 @@ const TRAINING_MODES = {
     label: "121 Game",
     description:
       "Checkout-Challenge: Starte bei 121 Punkten, erledige das Leg in bis zu 9 Darts. Erfolg erhöht das Ziel, ein Fehlschlag zieht 10 Punkte ab.",
+    supportsVariants: false,
+  },
+  randomCheckout: {
+    id: "randomCheckout",
+    label: "Random Checkout",
+    description:
+      "Zufaellige Checkouts von 2 bis 61, maximal 3 Darts pro Versuch.",
     supportsVariants: false,
   },
 };
@@ -530,7 +540,7 @@ function createTrainingPlayerState(config = {}) {
   const fallback = typeof config.fallback === "string" && config.fallback.trim()
     ? config.fallback.trim()
     : `Spieler ${slot + 1}`;
-  const customHistory = { around: [], game121: [] };
+  const customHistory = { around: [], game121: [], randomCheckout: [] };
   return {
     slot,
     name: fallback,
@@ -5018,6 +5028,9 @@ function ensureTrainingHistoryContainer(container) {
   if (!Array.isArray(history.game121)) {
     history.game121 = [];
   }
+  if (!Array.isArray(history.randomCheckout)) {
+    history.randomCheckout = [];
+  }
   return history;
 }
 
@@ -5069,6 +5082,7 @@ function loadProfileTrainingHistoryIntoPlayer(player, profile) {
   player.history = {
     around: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.around.id),
     game121: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.game121.id),
+    randomCheckout: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.randomCheckout.id),
   };
 }
 
@@ -5121,6 +5135,9 @@ function getTrainingModeConfig(mode = gameState.training.mode) {
 }
 
 function getTrainingTargets(mode = gameState.training.mode) {
+  if (mode !== TRAINING_MODES.around.id) {
+    return [];
+  }
   const variantId = gameState.training.variant || "boardClockwise";
   const variant = TRAINING_VARIANTS[variantId] || TRAINING_VARIANTS.boardClockwise;
   const base = typeof variant.build === "function" ? variant.build() : AROUND_THE_CLOCK_TARGETS.slice();
@@ -5129,6 +5146,22 @@ function getTrainingTargets(mode = gameState.training.mode) {
     targets.push("SB");
   }
   return targets;
+}
+
+function getRandomCheckoutTarget(previousTarget) {
+  const minTarget = TRAINING_RANDOM_MIN_TARGET;
+  const maxTarget = TRAINING_RANDOM_MAX_TARGET;
+  if (!Number.isFinite(minTarget) || !Number.isFinite(maxTarget) || minTarget > maxTarget) {
+    return null;
+  }
+  if (minTarget === maxTarget) {
+    return minTarget;
+  }
+  let target = minTarget;
+  do {
+    target = Math.floor(Math.random() * (maxTarget - minTarget + 1)) + minTarget;
+  } while (target === previousTarget);
+  return target;
 }
 
 function describeTrainingTarget(target, variant = "long") {
@@ -5199,6 +5232,9 @@ function resetTrainingPlayerState(player, mode = gameState.training.mode) {
   if (mode === TRAINING_MODES.game121.id) {
     player.currentTarget = TRAINING_121_BASE_TARGET;
     player.bestTarget = TRAINING_121_BASE_TARGET;
+  } else if (mode === TRAINING_MODES.randomCheckout.id) {
+    player.currentTarget = getRandomCheckoutTarget();
+    player.bestTarget = null;
   } else {
     player.currentTarget = null;
     player.bestTarget = TRAINING_121_BASE_TARGET;
@@ -5225,6 +5261,8 @@ function resetTrainingSession(options = {}) {
   const config = getTrainingModeConfig();
   if (wasActive && config.id === TRAINING_MODES.game121.id && !skipHistory) {
     gameState.training.players.forEach((player) => finalize121SessionForPlayer(player));
+  } else if (wasActive && config.id === TRAINING_MODES.randomCheckout.id && !skipHistory) {
+    gameState.training.players.forEach((player) => finalizeRandomCheckoutSessionForPlayer(player));
   }
   gameState.training.active = false;
   gameState.training.players.forEach((player) => {
@@ -5255,6 +5293,8 @@ function handleTrainingMissForSlot(slot) {
   const mode = getTrainingModeConfig().id;
   if (mode === TRAINING_MODES.game121.id) {
     handle121MissForPlayer(player);
+  } else if (mode === TRAINING_MODES.randomCheckout.id) {
+    handleRandomCheckoutMissForPlayer(player);
   } else {
     handleAroundMissForPlayer(player);
   }
@@ -5272,6 +5312,8 @@ function handleTrainingHitForSlot(slot) {
   const config = getTrainingModeConfig();
   if (config.id === TRAINING_MODES.game121.id) {
     handle121HitForPlayer(player);
+  } else if (config.id === TRAINING_MODES.randomCheckout.id) {
+    handleRandomCheckoutHitForPlayer(player);
   } else {
     const targets = getTrainingTargets(config.id);
     handleAroundHitForPlayer(player, config, targets);
@@ -5348,6 +5390,37 @@ function register121FailureForPlayer(player) {
   setTrainingMessage(`${player.name}: Checkout ${failedTarget} verpasst - weiter mit ${nextTarget}.`, "warning");
 }
 
+function handleRandomCheckoutMissForPlayer(player) {
+  player.darts += 1;
+  player.attemptDarts += 1;
+  const remaining = Math.max(0, TRAINING_RANDOM_MAX_DARTS - player.attemptDarts);
+  if (remaining <= 0) {
+    registerRandomCheckoutFailureForPlayer(player);
+  } else {
+    setTrainingMessage(`${player.name}: Noch ${remaining} Darts fuer ${player.currentTarget}.`);
+  }
+}
+
+function handleRandomCheckoutHitForPlayer(player) {
+  player.darts += 1;
+  player.attemptDarts += 1;
+  player.attempts += 1;
+  player.successes += 1;
+  const finishedTarget = player.currentTarget;
+  const dartsUsed = player.attemptDarts;
+  player.attemptDarts = 0;
+  player.currentTarget = getRandomCheckoutTarget(finishedTarget);
+  setTrainingMessage(`${player.name}: Checkout ${finishedTarget} geschafft in ${dartsUsed} Darts!`, "success");
+}
+
+function registerRandomCheckoutFailureForPlayer(player) {
+  const failedTarget = player.currentTarget;
+  player.attempts += 1;
+  player.attemptDarts = 0;
+  player.currentTarget = getRandomCheckoutTarget(failedTarget);
+  setTrainingMessage(`${player.name}: Checkout ${failedTarget} verpasst - weiter mit ${player.currentTarget}.`, "warning");
+}
+
 function finalize121SessionForPlayer(player) {
   if (!player) return;
   if (!player.darts && !player.successes) {
@@ -5373,13 +5446,38 @@ function finalize121SessionForPlayer(player) {
   player.lastDurationMs = durationMs;
 }
 
+function finalizeRandomCheckoutSessionForPlayer(player) {
+  if (!player) return;
+  if (!player.darts && !player.attempts && !player.successes) {
+    player.lastDurationMs = 0;
+    return;
+  }
+  const durationMs = player.startTime ? Math.max(0, Date.now() - player.startTime) : player.lastDurationMs || 0;
+  const entry = createTrainingHistoryEntry(player, {
+    mode: TRAINING_MODES.randomCheckout.id,
+    label: TRAINING_MODES.randomCheckout.label,
+    darts: player.darts,
+    durationMs,
+    finishedAt: Date.now(),
+    targets: player.attempts,
+    meta: {
+      attempts: player.attempts,
+      successes: player.successes,
+      minTarget: TRAINING_RANDOM_MIN_TARGET,
+      maxTarget: TRAINING_RANDOM_MAX_TARGET,
+    },
+  });
+  recordTrainingEntryForPlayer(player, entry);
+  player.lastDurationMs = durationMs;
+}
+
 function recordTrainingEntryForPlayer(player, entry) {
   if (!player || !entry) return;
   ensureTrainingPlayerStateShape(player);
   const mode = entry.mode;
   if (player.profileId) {
     if (!player.history || typeof player.history !== "object") {
-      player.history = { around: [], game121: [] };
+      player.history = { around: [], game121: [], randomCheckout: [] };
     }
     if (!Array.isArray(player.history[mode])) {
       player.history[mode] = [];
@@ -5416,7 +5514,9 @@ function renderTrainingView() {
   if (!elements.trainingCard) return;
   const config = getTrainingModeConfig();
   const is121Mode = config.id === TRAINING_MODES.game121.id;
-  const targets = is121Mode ? [] : getTrainingTargets(config.id);
+  const isRandomMode = config.id === TRAINING_MODES.randomCheckout.id;
+  const isAroundMode = config.id === TRAINING_MODES.around.id;
+  const targets = isAroundMode ? getTrainingTargets(config.id) : [];
   const totalTargets = targets.length;
 
   if (elements.trainingDescription) {
@@ -5440,6 +5540,7 @@ function renderTrainingView() {
     renderTrainingPlayerView(player, {
       config,
       is121Mode,
+      isRandomMode,
       targets,
       totalTargets,
     });
@@ -5474,6 +5575,28 @@ function renderTrainingPlayerView(player, context) {
     }
     if (ui.progressLabel) {
       ui.progressLabel.textContent = `${player.bestTarget}`;
+    }
+    if (ui.targetGrid) {
+      ui.targetGrid.hidden = true;
+      ui.targetGrid.innerHTML = "";
+    }
+  } else if (context.isRandomMode) {
+    if (ui.targetLabel) {
+      ui.targetLabel.textContent = player.currentTarget != null ? String(player.currentTarget) : "-";
+    }
+    if (ui.targetMeta) {
+      const remaining = Math.max(0, TRAINING_RANDOM_MAX_DARTS - player.attemptDarts);
+      const successes = player.successes || 0;
+      const attempts = player.attempts || 0;
+      ui.targetMeta.textContent = `Noch ${remaining} Darts | Treffer ${successes} / ${attempts}`;
+    }
+    if (ui.progressTitle) {
+      ui.progressTitle.textContent = "Treffer";
+    }
+    if (ui.progressLabel) {
+      const successes = player.successes || 0;
+      const attempts = player.attempts || 0;
+      ui.progressLabel.textContent = `${successes} / ${attempts}`;
     }
     if (ui.targetGrid) {
       ui.targetGrid.hidden = true;
@@ -5572,6 +5695,10 @@ function renderTrainingHistoryForPlayer(player, mode, listElement) {
     if (entry.mode === TRAINING_MODES.game121.id) {
       const best = entry.meta?.bestTarget ?? entry.targets;
       targetMeta.textContent = `Bestes Ziel ${best}`;
+    } else if (entry.mode === TRAINING_MODES.randomCheckout.id) {
+      const successes = entry.meta?.successes ?? 0;
+      const attempts = entry.meta?.attempts ?? entry.targets ?? 0;
+      targetMeta.textContent = `Checkouts ${successes} / ${attempts}`;
     } else {
       const variantLabel = entry.meta?.variant ? ` · ${entry.meta.variant}` : "";
       targetMeta.textContent = `${entry.targets} Ziele${variantLabel}`;
@@ -5583,6 +5710,12 @@ function renderTrainingHistoryForPlayer(player, mode, listElement) {
     const dateLabel = formatProfileDate(entry.finishedAt);
     const metaParts = [];
     if (entry.mode === TRAINING_MODES.game121.id) {
+      const successes = entry.meta?.successes ?? 0;
+      const attempts = entry.meta?.attempts ?? 0;
+      metaParts.push(`${successes} Checkouts`);
+      metaParts.push(`${attempts} Versuche`);
+    }
+    if (entry.mode === TRAINING_MODES.randomCheckout.id) {
       const successes = entry.meta?.successes ?? 0;
       const attempts = entry.meta?.attempts ?? 0;
       metaParts.push(`${successes} Checkouts`);
