@@ -85,8 +85,13 @@ const TRAINING_VARIANTS_BY_MODE = {
     },
     {
       id: "doubles402010",
-      label: "Doubles 40-20-10",
-      build: () => ["D40", "D20", "D10"],
+      label: "Doubles 20-10-5",
+      build: () => ["D20", "D10", "D5"],
+    },
+    {
+      id: "doubles189",
+      label: "Doubles 18-9",
+      build: () => ["D18", "D9"],
     },
     {
       id: "doubles1263",
@@ -1052,6 +1057,11 @@ function computeNextLegStarter() {
 
 function prepareNextLeg() {
   const nextStarter = computeNextLegStarter();
+  const totalLegsPlayed = gameState.players.reduce(
+    (sum, entry) => sum + (entry.totalLegsWon || 0),
+    0
+  );
+
   gameState.players.forEach((player) => {
     player.score = gameState.startingScore;
     player.lastTurn = null;
@@ -4261,8 +4271,7 @@ function finalizeGameStats() {
     profile.stats.checkoutHits =
       (profile.stats.checkoutHits || 0) + (player.checkoutHitsThisGame || 0);
     profile.stats.legsWon += player.totalLegsWon || 0;
-    const setsWonThisMatch = player.setsWon || (player.id === gameState.winnerId ? 1 : 0);
-    profile.stats.setsWon += setsWonThisMatch;
+    profile.stats.legsPlayed = (profile.stats.legsPlayed || 0) + totalLegsPlayed;
     profile.stats.dartHistogram = cloneHistogram(profile.stats.dartHistogram);
     const entryHistogram = cloneHistogram(player.dartHitsThisGame);
     Object.keys(entryHistogram).forEach((key) => {
@@ -4280,8 +4289,8 @@ function finalizeGameStats() {
           ? Number((player.totalPointsThisGame / player.totalDartsThisGame).toFixed(2))
           : 0,
       legWon: player.id === gameState.winnerId,
-      setsWon: setsWonThisMatch,
       legsWon: player.totalLegsWon || 0,
+      legsPlayed: totalLegsPlayed,
       first12Average:
         player.first12DartsThisGame > 0
           ? Number((player.first12PointsThisGame / player.first12DartsThisGame).toFixed(2))
@@ -6635,6 +6644,7 @@ function onProfileFormSubmit(event) {
     stats: {
       gamesPlayed: 0,
       legsWon: 0,
+      legsPlayed: 0,
       setsWon: 0,
       totalPoints: 0,
       totalDarts: 0,
@@ -6814,6 +6824,7 @@ function normalizeImportedProfiles(source) {
       profile.stats = {
         gamesPlayed: Number(entry.stats.gamesPlayed) || 0,
         legsWon: Number(entry.stats.legsWon) || 0,
+        legsPlayed: Number(entry.stats.legsPlayed) || 0,
         setsWon: Number(entry.stats.setsWon) || 0,
         totalPoints: Number(entry.stats.totalPoints) || 0,
         totalDarts: Number(entry.stats.totalDarts) || 0,
@@ -6839,6 +6850,7 @@ function normalizeImportedProfiles(source) {
           darts: Number(item.darts) || 0,
           legWon: Boolean(item.legWon),
           legsWon: Number(item.legsWon) || 0,
+          legsPlayed: Number(item.legsPlayed) || 0,
           setsWon: Number(item.setsWon) || 0,
           opponent: typeof item.opponent === "string" ? item.opponent : undefined,
         }));
@@ -7013,6 +7025,7 @@ function resetProfileStats(profileId) {
   ensureProfileStats(profile);
   profile.stats.gamesPlayed = 0;
   profile.stats.legsWon = 0;
+  profile.stats.legsPlayed = 0;
   profile.stats.setsWon = 0;
   profile.stats.totalPoints = 0;
   profile.stats.totalDarts = 0;
@@ -7211,7 +7224,6 @@ function renderProfileList() {
       const doubleRate = formatPercentage(profile.stats.doubleHits || 0, profile.stats.totalDarts || 0);
       const games = profile.stats.gamesPlayed;
       const legs = profile.stats.legsWon;
-      const sets = profile.stats.setsWon || 0;
       const initial = (profile.nickname || profile.firstName || displayName || "?").charAt(0).toUpperCase();
 
       const avatarMarkup = profile.image
@@ -7223,13 +7235,9 @@ function renderProfileList() {
         .map((entry) => {
           const dateLabel = formatProfileDate(entry.date);
           const avg = entry.darts ? formatAverage(entry.points, entry.darts) : "0.00";
-          const setsWon = entry.setsWon != null ? entry.setsWon : entry.legWon ? 1 : 0;
           const legsWon = entry.legsWon != null ? entry.legsWon : entry.legWon ? 1 : 0;
-          const setInfo =
-            setsWon || legsWon
-              ? ` · Sätze: ${setsWon} · Legs: ${legsWon}`
-              : "";
-          return `<li>${dateLabel}: ${entry.points} Punkte · ${entry.darts} Darts · Ø ${avg}${setInfo}${entry.legWon ? " · Sieg" : ""
+          const legInfo = legsWon ? ` · Legs: ${legsWon}` : "";
+          return `<li>${dateLabel}: ${entry.points} Punkte · ${entry.darts} Darts · Ø ${avg}${legInfo}${entry.legWon ? " · Sieg" : ""
             }</li>`;
         })
         .join("");
@@ -7240,7 +7248,7 @@ function renderProfileList() {
         <div class="profile-info">
           <h4>${displayName}</h4>
           <span>${fullName || ""}</span>
-          <p class="profile-stats">Spiele: ${games} · Sätze: ${sets} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
+          <p class="profile-stats">Spiele: ${games} · Legs: ${legs} · Ø/Dart: ${averagePerDart}${profile.stats.totalDarts ? ` · 3-Dart Ø: ${averageThreeDart}` : ""
         }</p>
           <p class="profile-stats secondary">Ø12: ${first12Average} · Checkout: ${checkoutRate} · Triple%: ${tripleRate} · Double%: ${doubleRate}</p>
           ${historyEntries ? `<ul class="profile-history">${historyEntries}</ul>` : ""}
@@ -7317,8 +7325,10 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
     const points = Number(stats.totalPoints) || 0;
     const games = Number(stats.gamesPlayed) || 0;
     const legs = Number(stats.legsWon) || 0;
-    const legsWinRateValue = games > 0 ? legs / games : 0;
-    const legsWinRateLabel = formatPercentage(legs, games);
+    const legsPlayed = Number(stats.legsPlayed) || 0;
+    const legsRateBase = legsPlayed > 0 ? legsPlayed : games;
+    const legsWinRateValue = legsRateBase > 0 ? legs / legsRateBase : 0;
+    const legsWinRateLabel = formatPercentage(legs, legsRateBase);
     const averageValue = darts > 0 ? points / darts : 0;
     const first12AverageValue =
       Number(stats.first12Darts) > 0 ? Number(stats.first12Points) / Number(stats.first12Darts) : 0;
@@ -7344,6 +7354,7 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
       doubleRateValue,
       doubleRateLabel: formatPercentage(stats.doubleHits || 0, darts || 0),
       legs,
+      legsPlayed,
       legsWinRateValue,
       legsWinRateLabel,
       games,
@@ -8327,6 +8338,7 @@ function ensureProfileStats(profile) {
   profile.stats = profile.stats || {};
   profile.stats.gamesPlayed = profile.stats.gamesPlayed || 0;
   profile.stats.legsWon = profile.stats.legsWon || 0;
+  profile.stats.legsPlayed = profile.stats.legsPlayed || 0;
   profile.stats.setsWon = profile.stats.setsWon || 0;
   profile.stats.totalPoints = profile.stats.totalPoints || 0;
   profile.stats.totalDarts = profile.stats.totalDarts || 0;

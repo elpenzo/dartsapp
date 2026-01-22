@@ -121,6 +121,7 @@
     profile.stats = profile.stats || {};
     profile.stats.gamesPlayed = profile.stats.gamesPlayed || 0;
     profile.stats.legsWon = profile.stats.legsWon || 0;
+    profile.stats.legsPlayed = profile.stats.legsPlayed || 0;
     profile.stats.setsWon = profile.stats.setsWon || 0;
     profile.stats.totalPoints = profile.stats.totalPoints || 0;
     profile.stats.totalDarts = profile.stats.totalDarts || 0;
@@ -223,7 +224,6 @@
   function renderMetrics(stats) {
     const metrics = [
       { label: "Spiele", value: stats.gamesPlayed },
-      { label: "Sätze", value: stats.setsWon },
       { label: "Legs", value: stats.legsWon },
       { label: "Gesamtpunkte", value: stats.totalPoints, format: formatNumber },
       { label: "Geworfene Darts", value: stats.totalDarts, format: formatNumber },
@@ -304,9 +304,8 @@
         const checkout = formatPercentage(entry.checkoutHits, entry.checkoutAttempts);
         const bestTurn = normalizeBestSet(entry.bestTurn);
         const bestTurnLabel = bestTurn ? `${bestTurn.darts.join(" - ")} (${bestTurn.total.toLocaleString("de-DE")})` : "–";
-        const setsWon = Number(entry.setsWon) || 0;
         const legsWon = Number(entry.legsWon) || 0;
-        const resultLabel = `Sätze: ${setsWon.toLocaleString("de-DE")} · Legs: ${legsWon.toLocaleString("de-DE")}`;
+        const resultLabel = `Legs: ${legsWon.toLocaleString("de-DE")}`;
         const dartsThrown = Number(entry.darts) || 0;
         const pointsScored = Number(entry.points) || 0;
         return `
@@ -333,7 +332,7 @@
               <th>Darts</th>
               <th>Ø/Dart</th>
               <th>Checkout</th>
-              <th>Sätze · Legs</th>
+              <th>Legs</th>
               <th>Bestes Set</th>
             </tr>
           </thead>
