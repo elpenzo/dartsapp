@@ -5253,7 +5253,7 @@ function getBobs27TargetValue(target) {
     return 50;
   }
   if (typeof target === "string") {
-    const match = target.match(/^D(\\d+)$/);
+    const match = target.match(/^D(\d+)$/);
     if (match) {
       return Number(match[1]) * 2;
     }
@@ -5266,7 +5266,7 @@ function describeTrainingTarget(target, variant = "long") {
     return variant === "short" ? `${target}` : `Zahl ${target}`;
   }
   if (typeof target === "string") {
-    const match = target.match(/^D(\\d+)$/);
+    const match = target.match(/^D(\d+)$/);
     if (match) {
       return variant === "short" ? `D${match[1]}` : `Double ${match[1]}`;
     }
