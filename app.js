@@ -7365,6 +7365,9 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
 
 function compareLeaderboardEntries(a, b, sortKey = gameState.leaderboardSort) {
   if (sortKey === "legs") {
+    if (b.legsWinRateValue !== a.legsWinRateValue) {
+      return b.legsWinRateValue - a.legsWinRateValue;
+    }
     if (b.legs !== a.legs) return b.legs - a.legs;
     if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
   } else {
