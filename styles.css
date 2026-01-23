@@ -206,6 +206,11 @@ body.play-view .active-player-banner {
   display: block;
 }
 
+.tv-view .active-player-banner,
+body.tv-view .active-player-banner {
+  display: block;
+}
+
 .play-view .scoreboard,
 body.play-view .scoreboard {
   order: 1;

@@ -2491,6 +2491,7 @@ function renderScoreboard() {
     elements.scoreboard.appendChild(fragment);
   });
 
+  syncRematchVisibility();
   updateActivePlayerBanner();
   renderActivePlayerHeatmap();
   renderScoreboardInsights();
@@ -4417,9 +4418,10 @@ function getInitialViewFromUrl() {
         elements.scoreboardHeatmap.hidden = true;
       }
     }
-    if (currentView === "play") {
+    if (currentView === "play" || currentView === "tv") {
       updateActivePlayerBanner();
-    } else if (currentView === "tv") {
+    }
+    if (currentView === "tv") {
       renderDartboardPicker();
     } else if (currentView === "training") {
       if (elements.trainingCard) {
@@ -6251,6 +6253,19 @@ function setRematchVisibility(isVisible) {
   if (!elements.rematchBtn) return;
   elements.rematchBtn.hidden = !isVisible;
   elements.rematchBtn.disabled = !isVisible;
+}
+
+function syncRematchVisibility() {
+  if (!elements.rematchBtn) return;
+  if (gameState.matchCompleted && gameState.winnerId) {
+    if (!gameState.lastRematchConfig) {
+      prepareRematchConfig();
+      return;
+    }
+    setRematchVisibility(true);
+    return;
+  }
+  setRematchVisibility(false);
 }
 
 function toggleMainMenu(forceOpen) {
