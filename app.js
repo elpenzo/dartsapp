@@ -261,6 +261,7 @@ const TOURNAMENT_TYPES = {
 const DEFAULT_TOURNAMENT_TYPE = "ko";
 const LEAGUE_DEFAULT_FINALISTS = 4;
 const LEAGUE_POINTS_WIN = 2;
+const TOURNAMENT_STORAGE_KEY = "friendDartTournament";
 const MAX_TOURNAMENT_PLAYERS = 16;
 const TOURNAMENT_ROUNDS = [
   { id: "roundOf16", label: "Achtelfinale" },
@@ -345,6 +346,7 @@ const elements = {
   tournamentCard: document.querySelector(".tournament-card"),
   tournamentForm: document.getElementById("tournament-form"),
   tournamentResetBtn: document.getElementById("tournament-reset"),
+  tournamentAbortBtn: document.getElementById("tournament-abort"),
   tournamentTypeSelect: document.getElementById("tournament-type"),
   tournamentMatchModeSelect: document.getElementById("tournament-match-mode"),
   leagueFinalistsSelect: document.getElementById("league-finalists"),
@@ -538,6 +540,14 @@ function createInitialTournamentState() {
   };
 }
 
+function getActiveTournamentMatchId(tournament) {
+  if (!tournament?.active) return null;
+  if (tournament.type === TOURNAMENT_TYPES.league.id && tournament.phase !== "playoffs") {
+    return tournament.league?.currentMatchId || null;
+  }
+  return tournament.currentMatchId || null;
+}
+
 function createCameraPipelineStatusMap() {
   return CAMERA_PIPELINE_STEPS.reduce((map, step) => {
     map[step.id] = "pending";
@@ -669,12 +679,13 @@ const gameState = {
   currentLeg: 1,
   legStarterIndex: 0,
     lastLegWinnerId: null,
-    matchCompleted: false,
-    tournament: createInitialTournamentState(),
-    lastGameConfig: null,
-    lastRematchConfig: null,
-    camera: createInitialCameraState(),
-  };
+  matchCompleted: false,
+  tournament: createInitialTournamentState(),
+  activeTournamentMatchId: null,
+  lastGameConfig: null,
+  lastRematchConfig: null,
+  camera: createInitialCameraState(),
+};
 
 let profiles = [];
 let pendingProfileImage = null;
@@ -1130,9 +1141,12 @@ function handleLegWin(player) {
     gameState.winnerId = player.id;
     gameState.matchCompleted = true;
     notifyVoiceStatus("success", `${displayName} gewinnt das Match`);
+    if (isTournamentGameActive()) {
+      handleTournamentMatchCompletion(player);
+      setViewMode("tournament");
+    }
     finalizeGameStats();
     prepareRematchConfig();
-    handleTournamentMatchCompletion(player);
     return;
   }
 
@@ -1303,6 +1317,9 @@ async function initialize() {
   if (elements.tournamentResetBtn) {
     elements.tournamentResetBtn.addEventListener("click", resetTournamentForm);
   }
+  if (elements.tournamentAbortBtn) {
+    elements.tournamentAbortBtn.addEventListener("click", abortTournament);
+  }
   if (elements.tournamentTypeSelect) {
     elements.tournamentTypeSelect.addEventListener("change", () => updateTournamentModeUI());
   }
@@ -1414,9 +1431,18 @@ async function initialize() {
   }
 
   resetGame();
-  updateTournamentModeUI();
-  renderTournamentView();
-  setTournamentStatus("Kein Turnier aktiv.", "idle");
+  const storedTournament = loadTournamentState();
+  if (storedTournament && storedTournament.active) {
+    gameState.tournament = storedTournament;
+    updateTournamentModeUI();
+    renderTournamentView();
+    setTournamentStatus("Turnier geladen. Fortsetzung moeglich.", "pending");
+  } else {
+    gameState.tournament = createInitialTournamentState();
+    updateTournamentModeUI();
+    renderTournamentView();
+    setTournamentStatus("Kein Turnier aktiv.", "idle");
+  }
 }
 
 function onSetupSubmit(event) {
@@ -1466,6 +1492,14 @@ function startGame(
       profileId: entry.profileId || "",
     };
   });
+
+  const isTournamentGame = configs.some((entry) => Boolean(entry.tournamentPlayerId));
+  if (!isTournamentGame && getActiveTournamentMatchId(gameState.tournament)) {
+    suspendActiveTournamentMatch();
+  }
+  gameState.activeTournamentMatchId = isTournamentGame
+    ? getActiveTournamentMatchId(gameState.tournament)
+    : null;
 
   if (!configs.length) {
     configs.push({ name: "Player 1", profileId: "" }, { name: "Player 2", profileId: "" });
@@ -7631,12 +7665,136 @@ function updateTournamentModeUI() {
   }
 }
 
+function normalizeTournamentState(raw) {
+  const base = createInitialTournamentState();
+  if (!raw || typeof raw !== "object") return base;
+  const type = normalizeTournamentType(raw.type);
+  const merged = {
+    ...base,
+    ...raw,
+    type,
+    phase: raw.phase || (type === TOURNAMENT_TYPES.league.id ? "league" : "ko"),
+  };
+
+  merged.players = Array.isArray(raw.players) ? raw.players : [];
+  merged.rounds = Array.isArray(raw.rounds) ? raw.rounds : [];
+  merged.matchLookup = raw.matchLookup && typeof raw.matchLookup === "object" ? raw.matchLookup : {};
+
+  const leagueRaw = raw.league && typeof raw.league === "object" ? raw.league : {};
+  merged.league = {
+    ...base.league,
+    ...leagueRaw,
+  };
+  merged.league.rounds = Array.isArray(leagueRaw.rounds) ? leagueRaw.rounds : [];
+  merged.league.matchLookup =
+    leagueRaw.matchLookup && typeof leagueRaw.matchLookup === "object" ? leagueRaw.matchLookup : {};
+  merged.league.finalistsCount = normalizeLeagueFinalistsCount(
+    merged.league.finalistsCount,
+    merged.players.length
+  );
+
+  if (merged.status === "in-progress") {
+    merged.status = "pending";
+  }
+  merged.currentMatchId = null;
+  merged.currentRoundIndex = null;
+  merged.currentMatchIndex = null;
+
+  if (merged.type === TOURNAMENT_TYPES.league.id && merged.phase !== "playoffs") {
+    merged.league.currentMatchId = null;
+    merged.league.currentRoundIndex = null;
+    merged.league.currentMatchIndex = null;
+    merged.league.rounds.forEach((round) => {
+      round.matches?.forEach((match) => {
+        if (match?.status === "in-progress") {
+          match.status = "pending";
+        }
+      });
+    });
+  } else {
+    merged.rounds.forEach((round) => {
+      round.matches?.forEach((match) => {
+        if (match?.status === "in-progress") {
+          match.status = "pending";
+        }
+      });
+    });
+  }
+
+  return merged;
+}
+
+function serializeTournamentState(tournament) {
+  if (!tournament || typeof tournament !== "object") return null;
+  const clone = JSON.parse(JSON.stringify(tournament));
+  delete clone.nextMatchTimer;
+  return clone;
+}
+
+function saveTournamentState() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (!gameState.tournament?.active) {
+      localStorage.removeItem(TOURNAMENT_STORAGE_KEY);
+      return;
+    }
+    const payload = serializeTournamentState(gameState.tournament);
+    if (!payload) return;
+    localStorage.setItem(TOURNAMENT_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn("Turnier konnte nicht gespeichert werden:", error);
+  }
+}
+
+function loadTournamentState() {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(TOURNAMENT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return normalizeTournamentState(parsed);
+  } catch (error) {
+    console.warn("Turnier konnte nicht geladen werden:", error);
+    return null;
+  }
+}
+
 function clearTournamentMatchTimer() {
   const tournament = gameState.tournament;
   if (tournament?.nextMatchTimer) {
     clearTimeout(tournament.nextMatchTimer);
     tournament.nextMatchTimer = null;
   }
+}
+
+function suspendActiveTournamentMatch() {
+  const tournament = gameState.tournament;
+  if (!tournament?.active) return;
+  if (tournament.type === TOURNAMENT_TYPES.league.id && tournament.phase !== "playoffs") {
+    const matchId = tournament.league?.currentMatchId;
+    if (!matchId) return;
+    const match = getLeagueMatchById(tournament, matchId);
+    if (match && match.status === "in-progress") {
+      match.status = "pending";
+    }
+    tournament.league.currentMatchId = null;
+    tournament.league.currentRoundIndex = null;
+    tournament.league.currentMatchIndex = null;
+  } else {
+    const matchId = tournament.currentMatchId;
+    if (!matchId) return;
+    const match = getTournamentMatchById(tournament, matchId);
+    if (match && match.status === "in-progress") {
+      match.status = "pending";
+    }
+    tournament.currentMatchId = null;
+    tournament.currentRoundIndex = null;
+    tournament.currentMatchIndex = null;
+  }
+  tournament.status = "pending";
+  saveTournamentState();
+  renderTournamentView();
+  setTournamentStatus("Turnier pausiert. Jederzeit fortsetzen.", "pending");
 }
 
 function resetTournamentForm() {
@@ -7668,9 +7826,24 @@ function resetTournamentForm() {
     elements.leagueFinalistsSelect.value = String(LEAGUE_DEFAULT_FINALISTS);
   }
   gameState.tournament = createInitialTournamentState();
+  gameState.activeTournamentMatchId = null;
+  saveTournamentState();
   updateTournamentModeUI();
   renderTournamentView();
   setTournamentStatus("Kein Turnier aktiv.", "idle");
+}
+
+function abortTournament() {
+  if (gameState.tournament?.status === "in-progress") {
+    setTournamentStatus("Match laeuft - Abbruch nach Matchende moeglich.", "error");
+    return;
+  }
+  gameState.tournament = createInitialTournamentState();
+  gameState.activeTournamentMatchId = null;
+  saveTournamentState();
+  updateTournamentModeUI();
+  renderTournamentView();
+  setTournamentStatus("Turnier abgebrochen.", "idle");
 }
 
 function collectTournamentPlayerEntries() {
@@ -7744,6 +7917,7 @@ function onTournamentSubmit(event) {
     tournament.matchLookup = {};
     tournament.status = "pending";
     gameState.tournament = tournament;
+    saveTournamentState();
     updateTournamentModeUI();
     renderTournamentView();
     setTournamentStatus("Liga erstellt. Begegnungen koennen frei gespielt werden.", "pending");
@@ -7760,6 +7934,7 @@ function onTournamentSubmit(event) {
     tournament.status = "pending";
   }
   gameState.tournament = tournament;
+  saveTournamentState();
 
   updateTournamentModeUI();
   renderTournamentView();
@@ -8156,15 +8331,72 @@ function describeTournamentMatchStatus(tournament, match) {
 }
 
 function hasActiveTournamentMatch(tournament) {
-  if (!tournament?.active) return false;
-  if (tournament.type === TOURNAMENT_TYPES.league.id && tournament.phase !== "playoffs") {
-    return Boolean(tournament.league?.currentMatchId);
-  }
-  return Boolean(tournament.currentMatchId);
+  return Boolean(getActiveTournamentMatchId(tournament));
 }
 
 function handleTournamentStartBlocked() {
   setTournamentStatus("Ein Match laeuft bereits. Bitte beenden oder abbrechen.", "error");
+}
+
+function isTournamentGameActive() {
+  return Array.isArray(gameState.players)
+    ? gameState.players.some((player) => Boolean(player?.tournamentPlayerId))
+    : false;
+}
+
+function getTournamentPlayerIdsFromGame() {
+  if (!Array.isArray(gameState.players)) return [];
+  const ids = gameState.players
+    .map((player) => player?.tournamentPlayerId || null)
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
+function computeLegsWonFromHistory(playerId) {
+  if (!playerId) return 0;
+  return gameState.history.filter((entry) => entry.legWon && entry.playerId === playerId).length;
+}
+
+function findLeagueMatchByPlayers(tournament, playerIds) {
+  if (!tournament?.league?.rounds?.length || playerIds.length < 2) return null;
+  const [first, second] = playerIds;
+  for (let roundIndex = 0; roundIndex < tournament.league.rounds.length; roundIndex += 1) {
+    const round = tournament.league.rounds[roundIndex];
+    if (!round?.matches?.length) continue;
+    for (let matchIndex = 0; matchIndex < round.matches.length; matchIndex += 1) {
+      const match = round.matches[matchIndex];
+      if (!match) continue;
+      const isMatch =
+        (match.homeId === first && match.awayId === second) ||
+        (match.homeId === second && match.awayId === first);
+      if (isMatch) {
+        return { roundIndex, matchIndex, match };
+      }
+    }
+  }
+  return null;
+}
+
+function findTournamentMatchByPlayers(tournament, playerIds) {
+  if (!tournament?.rounds?.length || playerIds.length < 2) return null;
+  const [first, second] = playerIds;
+  for (let roundIndex = 0; roundIndex < tournament.rounds.length; roundIndex += 1) {
+    const round = tournament.rounds[roundIndex];
+    if (!round?.matches?.length) continue;
+    for (let matchIndex = 0; matchIndex < round.matches.length; matchIndex += 1) {
+      const match = round.matches[matchIndex];
+      if (!match) continue;
+      const slots = Array.isArray(match.players) ? match.players : [];
+      const ids = slots.map((slot) => slot?.participantId).filter(Boolean);
+      if (ids.length < 2) continue;
+      const isMatch =
+        (ids[0] === first && ids[1] === second) || (ids[0] === second && ids[1] === first);
+      if (isMatch) {
+        return { roundIndex, matchIndex, match };
+      }
+    }
+  }
+  return null;
 }
 
 function findNextLeagueMatch(tournament) {
@@ -8630,6 +8862,8 @@ function launchLeagueMatch(target) {
   league.currentMatchId = match.id;
   match.status = "in-progress";
   tournament.status = "in-progress";
+  gameState.activeTournamentMatchId = match.id;
+  saveTournamentState();
 
   renderTournamentView();
 
@@ -8666,11 +8900,21 @@ function launchLeagueMatch(target) {
 function handleLeagueMatchCompletion(winningPlayer) {
   const tournament = gameState.tournament;
   const league = tournament?.league;
-  if (!tournament?.active || !league?.currentMatchId) return;
+  if (!tournament?.active) return;
+  if (!isTournamentGameActive()) return;
 
   clearTournamentMatchTimer();
 
-  const match = getLeagueMatchById(tournament, league.currentMatchId);
+  let match = league?.currentMatchId ? getLeagueMatchById(tournament, league.currentMatchId) : null;
+  if (!match) {
+    const playerIds = getTournamentPlayerIdsFromGame();
+    const lookup = findLeagueMatchByPlayers(tournament, playerIds);
+    if (!lookup) return;
+    league.currentMatchId = lookup.match.id;
+    league.currentRoundIndex = lookup.roundIndex;
+    league.currentMatchIndex = lookup.matchIndex;
+    match = lookup.match;
+  }
   if (!match) {
     league.currentMatchId = null;
     return;
@@ -8683,8 +8927,12 @@ function handleLeagueMatchCompletion(winningPlayer) {
     (player) => player.tournamentPlayerId === match.awayId
   );
 
-  const homeLegs = homePlayer ? Number(homePlayer.totalLegsWon) || 0 : 0;
-  const awayLegs = awayPlayer ? Number(awayPlayer.totalLegsWon) || 0 : 0;
+  const homeLegsRaw = homePlayer ? Number(homePlayer.totalLegsWon) || 0 : 0;
+  const awayLegsRaw = awayPlayer ? Number(awayPlayer.totalLegsWon) || 0 : 0;
+  const homeLegs =
+    homeLegsRaw || computeLegsWonFromHistory(homePlayer?.id);
+  const awayLegs =
+    awayLegsRaw || computeLegsWonFromHistory(awayPlayer?.id);
 
   match.legsHome = homeLegs;
   match.legsAway = awayLegs;
@@ -8701,8 +8949,11 @@ function handleLeagueMatchCompletion(winningPlayer) {
   league.currentRoundIndex = null;
   league.currentMatchIndex = null;
   tournament.status = "pending";
+  gameState.activeTournamentMatchId = null;
+  saveTournamentState();
 
   renderTournamentView();
+  setViewMode("tournament");
 
   if (isLeagueStageComplete(league)) {
     league.completed = true;
@@ -8716,11 +8967,13 @@ function handleLeagueMatchCompletion(winningPlayer) {
       tournament.championId = null;
       updateTournamentModeUI();
       renderTournamentView();
+      saveTournamentState();
 
       setTournamentStatus(
         `Liga beendet. Playoffs mit Top ${finalists.length} starten.`,
         "pending"
       );
+      setViewMode("tournament");
       return;
     }
 
@@ -8730,6 +8983,7 @@ function handleLeagueMatchCompletion(winningPlayer) {
       tournament.status = "complete";
       setTournamentStatus(`Champion: ${standings[0].name}`, "complete");
       setViewMode("tournament");
+      saveTournamentState();
     }
     return;
   }
@@ -8745,6 +8999,8 @@ function handleLeagueMatchCompletion(winningPlayer) {
   }
 
   setTournamentStatus("Liga abgeschlossen.", "complete");
+  saveTournamentState();
+  setViewMode("tournament");
 }
 
 function launchTournamentMatch(target) {
@@ -8768,6 +9024,8 @@ function launchTournamentMatch(target) {
   tournament.currentMatchId = match.id;
   match.status = "in-progress";
   tournament.status = "in-progress";
+  gameState.activeTournamentMatchId = match.id;
+  saveTournamentState();
 
   renderTournamentView();
 
@@ -8804,11 +9062,22 @@ function launchTournamentMatch(target) {
 function handleTournamentMatchCompletion(winningPlayer) {
   const tournament = gameState.tournament;
   if (!tournament?.active) return;
+  if (!isTournamentGameActive()) return;
   if (tournament.type === TOURNAMENT_TYPES.league.id && tournament.phase !== "playoffs") {
     handleLeagueMatchCompletion(winningPlayer);
     return;
   }
-  if (!tournament.currentMatchId) return;
+  if (!tournament.currentMatchId) {
+    const playerIds = getTournamentPlayerIdsFromGame();
+    const lookup = findTournamentMatchByPlayers(tournament, playerIds);
+    if (lookup) {
+      tournament.currentMatchId = lookup.match.id;
+      tournament.currentRoundIndex = lookup.roundIndex;
+      tournament.currentMatchIndex = lookup.matchIndex;
+    } else {
+      return;
+    }
+  }
   clearTournamentMatchTimer();
   const lookup = tournament.matchLookup?.[tournament.currentMatchId];
   if (!lookup) {
@@ -8831,12 +9100,14 @@ function handleTournamentMatchCompletion(winningPlayer) {
   tournament.currentMatchId = null;
   tournament.currentRoundIndex = null;
   tournament.currentMatchIndex = null;
+  gameState.activeTournamentMatchId = null;
 
   if (winnerId) {
     propagateTournamentWinner(tournament, match, winnerId);
   }
 
   resolveTournamentByes(tournament);
+  saveTournamentState();
   renderTournamentView();
 
   if (match.roundId === "final") {
@@ -8845,6 +9116,7 @@ function handleTournamentMatchCompletion(winningPlayer) {
     const championName = winnerId ? getTournamentPlayerName(tournament, winnerId) : "Unbekannt";
     setTournamentStatus(`Champion: ${championName}`, "complete");
     setViewMode("tournament");
+    saveTournamentState();
     return;
   }
 
@@ -8866,9 +9138,12 @@ function handleTournamentMatchCompletion(winningPlayer) {
     tournament.status = "complete";
     setTournamentStatus(`Champion: ${championName}`, "complete");
     setViewMode("tournament");
+    saveTournamentState();
   } else {
     setTournamentStatus("Turnier abgeschlossen.", "complete");
+    saveTournamentState();
   }
+  setViewMode("tournament");
 }
 
 function getActiveTournamentMatchLabel() {

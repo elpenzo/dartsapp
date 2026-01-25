@@ -1570,6 +1570,15 @@ button.ghost {
   color: var(--text);
 }
 
+button.ghost.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+button.ghost.danger:hover {
+  background: rgba(229, 62, 62, 0.08);
+}
+
 .scoreboard-grid {
   display: grid;
   gap: 0.75rem;
