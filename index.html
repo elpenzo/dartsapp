@@ -170,8 +170,8 @@
     <section class="card tournament-card" aria-labelledby="tournament-title">
       <h2 id="tournament-title">Turniermodus</h2>
       <p class="tournament-intro">
-        Richte ein K.-o.-Turnier mit bis zu 16 Spielern aus. Die Gewinner jeder Runde steigen automatisch in das
-        Viertel-, Halbfinale und Finale auf.
+        Richte ein K.-o.-Turnier oder eine Liga mit Hin- und Rueckrunde (bis zu 16 Spieler) aus. Die Tabelle bestimmt
+        die Finalisten.
       </p>
       <form id="tournament-form" class="tournament-form">
         <div class="tournament-grid">
@@ -322,19 +322,48 @@
         </div>
         <div class="tournament-controls">
           <div class="form-row">
+            <label for="tournament-type">Turniermodus</label>
+            <select id="tournament-type" name="tournamentType">
+              <option value="ko" selected>K.-o.-Turnier</option>
+              <option value="league">Liga (Hin- und Rueckrunde)</option>
+            </select>
+          </div>
+          <div class="form-row">
             <label for="tournament-match-mode">Matchmodus</label>
             <select id="tournament-match-mode" name="tournamentMatchMode">
               <option value="single" selected>Einzel-Leg</option>
               <option value="bestOfThreeLegs">Saetze (Best of 3 Legs, 2 Saetze zum Sieg)</option>
             </select>
           </div>
+          <div class="form-row league-only">
+            <label for="league-finalists">Finalisten</label>
+            <select id="league-finalists" name="leagueFinalists">
+              <option value="2">Top 2</option>
+              <option value="4" selected>Top 4</option>
+              <option value="6">Top 6</option>
+              <option value="8">Top 8</option>
+            </select>
+          </div>
         </div>
+        <p class="league-hint league-only">
+          Jeder spielt jeden mit Hin- und Rueckspiel. Die Tabelle bestimmt die Finalisten.
+        </p>
         <div class="form-actions tournament-actions">
           <button type="submit" class="primary">Turnier starten</button>
           <button type="button" id="tournament-reset" class="ghost">Formular leeren</button>
         </div>
       </form>
       <div id="tournament-status" class="tournament-status" aria-live="polite"></div>
+      <div class="league-grid league-only">
+        <div class="league-table-wrapper">
+          <h3>Ligatabelle</h3>
+          <div id="league-table" class="league-table" aria-live="polite"></div>
+        </div>
+        <div class="league-schedule-wrapper">
+          <h3>Spielplan</h3>
+          <div id="league-schedule" class="league-schedule" aria-live="polite"></div>
+        </div>
+      </div>
       <div class="tournament-bracket-wrapper">
         <h3>Turnierbaum</h3>
         <div id="tournament-bracket" class="tournament-bracket" aria-live="polite"></div>
