@@ -59,6 +59,8 @@ const BOBS27_TARGETS = [
   ...Array.from({ length: 20 }, (_, index) => `D${index + 1}`),
   "DB",
 ];
+const KILLER_START_LIVES = 3;
+const KILLER_TARGETS = Array.from({ length: 20 }, (_, index) => index + 1);
 const TRAINING_VARIANTS_BY_MODE = {
   around: [
     {
@@ -99,6 +101,26 @@ const TRAINING_VARIANTS_BY_MODE = {
       build: () => ["D12", "D6", "D3"],
     },
   ],
+  killer: [
+    {
+      id: "killerDoubles",
+      label: "Doppel (Standard)",
+      ring: "D",
+      build: () => KILLER_TARGETS.slice(),
+    },
+    {
+      id: "killerSingles",
+      label: "Single-Felder",
+      ring: "S",
+      build: () => KILLER_TARGETS.slice(),
+    },
+    {
+      id: "killerTriples",
+      label: "Triple-Felder",
+      ring: "T",
+      build: () => KILLER_TARGETS.slice(),
+    },
+  ],
 };
 const TRAINING_MODES = {
   around: {
@@ -135,6 +157,13 @@ const TRAINING_MODES = {
     description:
       "Zufaellige Checkouts von 2 bis 61, maximal 3 Darts pro Versuch.",
     supportsVariants: false,
+  },
+  killer: {
+    id: "killer",
+    label: "Killer",
+    description:
+      "Killer: Jede:r waehlt ein eigenes Feld (1-20) und startet mit 3 Leben. Triff dein Feld (Standard: Doppel), um Killer zu werden. Jeder Treffer auf das gegnerische Feld zieht ein Leben ab.",
+    supportsVariants: true,
   },
 };
 
@@ -620,7 +649,7 @@ function createTrainingPlayerState(config = {}) {
   const fallback = typeof config.fallback === "string" && config.fallback.trim()
     ? config.fallback.trim()
     : `Spieler ${slot + 1}`;
-  const customHistory = { around: [], game121: [], doubles: [], bobs27: [], randomCheckout: [] };
+  const customHistory = { around: [], game121: [], doubles: [], bobs27: [], randomCheckout: [], killer: [] };
   return {
     slot,
     name: fallback,
@@ -640,6 +669,11 @@ function createTrainingPlayerState(config = {}) {
     score: BOBS27_START_SCORE,
     targetHits: 0,
     misses: 0,
+    killerTarget: null,
+    killerLives: KILLER_START_LIVES,
+    killerIsKiller: false,
+    killerEliminations: 0,
+    killerWinner: false,
     history: customHistory,
     customHistory,
   };
@@ -5148,6 +5182,9 @@ function ensureTrainingHistoryContainer(container) {
   if (!Array.isArray(history.randomCheckout)) {
     history.randomCheckout = [];
   }
+  if (!Array.isArray(history.killer)) {
+    history.killer = [];
+  }
   return history;
 }
 
@@ -5155,6 +5192,21 @@ function ensureTrainingPlayerStateShape(player) {
   if (!player) return;
   player.history = ensureTrainingHistoryContainer(player.history);
   player.customHistory = ensureTrainingHistoryContainer(player.customHistory);
+  if (player.killerTarget != null && !Number.isFinite(Number(player.killerTarget))) {
+    player.killerTarget = null;
+  }
+  if (!Number.isFinite(player.killerLives)) {
+    player.killerLives = KILLER_START_LIVES;
+  }
+  if (typeof player.killerIsKiller !== "boolean") {
+    player.killerIsKiller = false;
+  }
+  if (!Number.isFinite(player.killerEliminations)) {
+    player.killerEliminations = 0;
+  }
+  if (typeof player.killerWinner !== "boolean") {
+    player.killerWinner = false;
+  }
 }
 
 function getTrainingSlotFromElement(element) {
@@ -5202,6 +5254,7 @@ function loadProfileTrainingHistoryIntoPlayer(player, profile) {
     doubles: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.doubles.id),
     bobs27: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.bobs27.id),
     randomCheckout: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.randomCheckout.id),
+    killer: cloneTrainingHistory(profile.trainingHistory, TRAINING_MODES.killer.id),
   };
 }
 
@@ -5289,6 +5342,9 @@ function getTrainingTargets(mode = gameState.training.mode) {
   if (mode === TRAINING_MODES.bobs27.id) {
     return BOBS27_TARGETS.slice();
   }
+  if (mode === TRAINING_MODES.killer.id) {
+    return KILLER_TARGETS.slice();
+  }
   const variant = getTrainingVariantConfig(mode, gameState.training.variant);
   if (!variant) {
     return [];
@@ -5349,6 +5405,89 @@ function describeTrainingTarget(target, variant = "long") {
   return String(target);
 }
 
+function getKillerVariantConfig() {
+  return getTrainingVariantConfig(TRAINING_MODES.killer.id, gameState.training.variant);
+}
+
+function getKillerVariantPrefix(variantId) {
+  if (variantId === "killerSingles") return "S";
+  if (variantId === "killerTriples") return "T";
+  return "D";
+}
+
+function describeKillerTarget(target, variantId, style = "short") {
+  if (!Number.isFinite(target)) return "-";
+  const prefix = getKillerVariantPrefix(variantId);
+  if (style === "short") {
+    return `${prefix}${target}`;
+  }
+  const label = prefix === "S" ? "Single" : prefix === "T" ? "Triple" : "Double";
+  return `${label} ${target}`;
+}
+
+function setKillerTargetForPlayer(player, target) {
+  if (!player) return false;
+  if (gameState.training.active) {
+    setTrainingMessage("Ziel kann nur vor dem Start geaendert werden.", "warning");
+    return false;
+  }
+  const value = Number(target);
+  if (!Number.isFinite(value) || !KILLER_TARGETS.includes(value)) return false;
+  const variantId = getKillerVariantConfig()?.id;
+  const taken = gameState.training.players.find(
+    (entry) => entry.slot !== player.slot && entry.killerTarget === value
+  );
+  if (taken) {
+    setTrainingMessage(`Zahl ${value} ist bereits von ${taken.name} belegt.`, "warning");
+    return false;
+  }
+  if (player.killerTarget === value) {
+    player.killerTarget = null;
+    player.currentTarget = null;
+    setTrainingMessage(`${player.name}: Ziel entfernt.`, "warning");
+    renderTrainingView();
+    return true;
+  }
+  player.killerTarget = value;
+  player.currentTarget = value;
+  setTrainingMessage(
+    `${player.name}: Ziel ${describeKillerTarget(value, variantId, "short")} gesetzt.`,
+    "success"
+  );
+  renderTrainingView();
+  return true;
+}
+
+function ensureUniqueKillerTargets() {
+  const assigned = new Set();
+  let allSet = true;
+  gameState.training.players.forEach((player) => {
+    if (!Number.isFinite(player.killerTarget) || !KILLER_TARGETS.includes(player.killerTarget)) {
+      player.killerTarget = null;
+      allSet = false;
+      return;
+    }
+    if (assigned.has(player.killerTarget)) {
+      player.killerTarget = null;
+      allSet = false;
+    } else {
+      assigned.add(player.killerTarget);
+    }
+  });
+
+  gameState.training.players.forEach((player) => {
+    player.currentTarget = player.killerTarget;
+  });
+
+  return allSet;
+}
+
+function getKillerOpponent(player) {
+  return gameState.training.players.find(
+    (entry) => entry.slot !== player.slot && !entry.completed
+  ) || null;
+}
+
 function setTrainingMessage(message, tone = "info") {
   if (!elements.trainingStatusMessage) return;
   elements.trainingStatusMessage.textContent = message;
@@ -5371,7 +5510,11 @@ function setTrainingMode(mode) {
   gameState.training.mode = config.id;
   ensureTrainingVariantForMode(config.id);
   resetTrainingSession({ silent: true, skipHistory: true });
-  setTrainingMessage(`${config.label} bereit. Klicke auf Training starten.`);
+  if (config.id === TRAINING_MODES.killer.id) {
+    setTrainingMessage("Killer bereit. Ziele im Raster waehlen und Training starten.");
+  } else {
+    setTrainingMessage(`${config.label} bereit. Klicke auf Training starten.`);
+  }
   renderTrainingView();
 }
 
@@ -5406,11 +5549,21 @@ function resetTrainingPlayerState(player, mode = gameState.training.mode) {
   player.score = BOBS27_START_SCORE;
   player.targetHits = 0;
   player.misses = 0;
+  player.killerLives = KILLER_START_LIVES;
+  player.killerIsKiller = false;
+  player.killerEliminations = 0;
+  player.killerWinner = false;
   if (mode === TRAINING_MODES.game121.id) {
     player.currentTarget = TRAINING_121_BASE_TARGET;
     player.bestTarget = TRAINING_121_BASE_TARGET;
   } else if (mode === TRAINING_MODES.bobs27.id) {
     player.currentTarget = BOBS27_TARGETS[0] || null;
+    player.bestTarget = null;
+  } else if (mode === TRAINING_MODES.killer.id) {
+    if (!Number.isFinite(player.killerTarget)) {
+      player.killerTarget = null;
+    }
+    player.currentTarget = player.killerTarget;
     player.bestTarget = null;
   } else if (mode === TRAINING_MODES.randomCheckout.id) {
     player.currentTarget = getRandomCheckoutTarget();
@@ -5424,6 +5577,12 @@ function resetTrainingPlayerState(player, mode = gameState.training.mode) {
 function startTrainingSession(mode = gameState.training.mode) {
   const config = getTrainingModeConfig(mode);
   gameState.training.mode = config.id;
+  ensureTrainingVariantForMode(config.id);
+  if (config.id === TRAINING_MODES.killer.id && !ensureUniqueKillerTargets()) {
+    setTrainingMessage("Bitte fuer alle Spieler ein eindeutiges Ziel im Raster waehlen.", "warning");
+    renderTrainingView();
+    return;
+  }
   const now = Date.now();
   gameState.training.active = true;
   gameState.training.players.forEach((player) => {
@@ -5431,7 +5590,15 @@ function startTrainingSession(mode = gameState.training.mode) {
     player.active = true;
     player.startTime = now;
   });
-  setTrainingMessage(`Training gestartet: ${config.label}`);
+  if (config.id === TRAINING_MODES.killer.id) {
+    const variantLabel = getKillerVariantConfig()?.label || "Doppel";
+    setTrainingMessage(
+      `Killer gestartet: Triff zuerst dein eigenes ${variantLabel}, dann die Gegner.`,
+      "success"
+    );
+  } else {
+    setTrainingMessage(`Training gestartet: ${config.label}`);
+  }
   renderTrainingView();
 }
 
@@ -5447,6 +5614,8 @@ function resetTrainingSession(options = {}) {
         finalizeBobs27SessionForPlayer(player);
       }
     });
+  } else if (wasActive && config.id === TRAINING_MODES.killer.id && !skipHistory) {
+    gameState.training.players.forEach((player) => finalizeKillerSessionForPlayer(player, { aborted: true }));
   } else if (wasActive && config.id === TRAINING_MODES.randomCheckout.id && !skipHistory) {
     gameState.training.players.forEach((player) => finalizeRandomCheckoutSessionForPlayer(player));
   }
@@ -5481,6 +5650,8 @@ function handleTrainingMissForSlot(slot) {
     handle121MissForPlayer(player);
   } else if (mode === TRAINING_MODES.bobs27.id) {
     handleBobs27MissForPlayer(player);
+  } else if (mode === TRAINING_MODES.killer.id) {
+    handleKillerMissForPlayer(player);
   } else if (mode === TRAINING_MODES.randomCheckout.id) {
     handleRandomCheckoutMissForPlayer(player);
   } else {
@@ -5503,6 +5674,8 @@ function handleTrainingHitForSlot(slot) {
   } else if (config.id === TRAINING_MODES.bobs27.id) {
     const targets = getTrainingTargets(config.id);
     handleBobs27HitForPlayer(player, targets);
+  } else if (config.id === TRAINING_MODES.killer.id) {
+    handleKillerHitForPlayer(player);
   } else if (config.id === TRAINING_MODES.randomCheckout.id) {
     handleRandomCheckoutHitForPlayer(player);
   } else {
@@ -5545,6 +5718,54 @@ function handleAroundHitForPlayer(player, config, targets) {
   } else {
     const nextTarget = targets[player.currentIndex];
     setTrainingMessage(`${player.name}: Weiter mit ${describeTrainingTarget(nextTarget)}.`);
+  }
+}
+
+function handleKillerMissForPlayer(player) {
+  player.darts += 1;
+  player.misses += 1;
+  setTrainingMessage(`${player.name}: Fehlwurf.`, "warning");
+}
+
+function handleKillerHitForPlayer(player) {
+  player.darts += 1;
+  player.hits += 1;
+  if (!Number.isFinite(player.killerTarget)) {
+    setTrainingMessage(`${player.name}: Bitte zuerst ein Ziel waehlen.`, "warning");
+    return;
+  }
+  const variantId = getKillerVariantConfig()?.id;
+  if (!player.killerIsKiller) {
+    player.killerIsKiller = true;
+    setTrainingMessage(
+      `${player.name} ist jetzt Killer (${describeKillerTarget(player.killerTarget, variantId, "short")}).`,
+      "success"
+    );
+    return;
+  }
+
+  const opponent = getKillerOpponent(player);
+  if (!opponent) {
+    setTrainingMessage(`${player.name}: Kein Gegner mehr uebrig.`, "warning");
+    return;
+  }
+  const currentLives = Number.isFinite(opponent.killerLives) ? opponent.killerLives : KILLER_START_LIVES;
+  opponent.killerLives = Math.max(0, currentLives - 1);
+  if (opponent.killerLives <= 0) {
+    opponent.completed = true;
+    opponent.active = false;
+    opponent.killerWinner = false;
+    player.killerEliminations += 1;
+    setTrainingMessage(`${player.name} eliminiert ${opponent.name}!`, "success");
+  } else {
+    setTrainingMessage(
+      `${player.name}: Treffer auf ${opponent.name}. Leben ${opponent.killerLives}/${KILLER_START_LIVES}.`
+    );
+  }
+
+  const alive = gameState.training.players.filter((entry) => !entry.completed);
+  if (alive.length === 1) {
+    finalizeKillerSession(alive[0]);
   }
 }
 
@@ -5734,6 +5955,53 @@ function finalizeRandomCheckoutSessionForPlayer(player) {
   player.lastDurationMs = durationMs;
 }
 
+function finalizeKillerSessionForPlayer(player, options = {}) {
+  if (!player) return;
+  const hasActivity = player.darts || player.hits || player.misses || player.killerIsKiller;
+  if (!hasActivity && !options.aborted && !options.winner) {
+    player.lastDurationMs = 0;
+    return;
+  }
+  const durationMs = player.startTime ? Math.max(0, Date.now() - player.startTime) : player.lastDurationMs || 0;
+  const variant = getKillerVariantConfig();
+  const targetLabel = Number.isFinite(player.killerTarget)
+    ? describeKillerTarget(player.killerTarget, variant?.id, "short")
+    : null;
+  const entry = createTrainingHistoryEntry(player, {
+    mode: TRAINING_MODES.killer.id,
+    label: TRAINING_MODES.killer.label,
+    darts: player.darts,
+    durationMs,
+    finishedAt: Date.now(),
+    targets: Number.isFinite(player.killerLives) ? player.killerLives : 0,
+    meta: {
+      target: player.killerTarget,
+      targetLabel,
+      variant: variant?.label || null,
+      variantId: variant?.id || null,
+      lives: Number.isFinite(player.killerLives) ? player.killerLives : 0,
+      killer: Boolean(player.killerIsKiller),
+      eliminations: Number.isFinite(player.killerEliminations) ? player.killerEliminations : 0,
+      winner: options.winner === true,
+      aborted: options.aborted === true,
+    },
+  });
+  recordTrainingEntryForPlayer(player, entry);
+  player.lastDurationMs = durationMs;
+}
+
+function finalizeKillerSession(winner) {
+  if (!winner) return;
+  gameState.training.active = false;
+  gameState.training.players.forEach((player) => {
+    player.active = false;
+    player.completed = true;
+    player.killerWinner = player.slot === winner.slot;
+    finalizeKillerSessionForPlayer(player, { winner: player.slot === winner.slot });
+  });
+  setTrainingMessage(`${winner.name} gewinnt den Killer-Modus!`, "success");
+}
+
 function finalizeBobs27SessionForPlayer(player) {
   if (!player) return;
   if (!player.darts && !player.attempts && !player.hits && !player.misses) {
@@ -5767,7 +6035,7 @@ function recordTrainingEntryForPlayer(player, entry) {
   const mode = entry.mode;
   if (player.profileId) {
     if (!player.history || typeof player.history !== "object") {
-      player.history = { around: [], game121: [], doubles: [], bobs27: [], randomCheckout: [] };
+      player.history = { around: [], game121: [], doubles: [], bobs27: [], randomCheckout: [], killer: [] };
     }
     if (!Array.isArray(player.history[mode])) {
       player.history[mode] = [];
@@ -5806,6 +6074,7 @@ function renderTrainingView() {
   const is121Mode = config.id === TRAINING_MODES.game121.id;
   const isRandomMode = config.id === TRAINING_MODES.randomCheckout.id;
   const isBobs27Mode = config.id === TRAINING_MODES.bobs27.id;
+  const isKillerMode = config.id === TRAINING_MODES.killer.id;
   const isTargetListMode =
     config.id === TRAINING_MODES.around.id ||
     config.id === TRAINING_MODES.doubles.id ||
@@ -5843,6 +6112,7 @@ function renderTrainingView() {
       is121Mode,
       isRandomMode,
       isBobs27Mode,
+      isKillerMode,
       targets,
       totalTargets,
     });
@@ -5864,7 +6134,45 @@ function renderTrainingPlayerView(player, context) {
     }
   }
 
-  if (context.is121Mode) {
+  if (context.isKillerMode) {
+    const variant = getKillerVariantConfig();
+    const variantLabel = variant?.label || "Doppel";
+    const lives = Number.isFinite(player.killerLives) ? player.killerLives : KILLER_START_LIVES;
+    if (ui.targetLabel) {
+      if (player.completed && player.killerWinner) {
+        ui.targetLabel.textContent = "Gewonnen!";
+      } else if (player.completed) {
+        ui.targetLabel.textContent = "Ausgeschieden";
+      } else if (Number.isFinite(player.killerTarget)) {
+        ui.targetLabel.textContent = describeKillerTarget(player.killerTarget, variant?.id, "short");
+      } else {
+        ui.targetLabel.textContent = "-";
+      }
+    }
+    if (ui.targetMeta) {
+      if (!Number.isFinite(player.killerTarget)) {
+        ui.targetMeta.textContent = `Zahl waehlen (${variantLabel}).`;
+      } else if (player.completed && player.killerWinner) {
+        ui.targetMeta.textContent = "Letzter Spieler uebrig.";
+      } else if (player.completed) {
+        ui.targetMeta.textContent = "Keine Leben mehr.";
+      } else if (player.killerIsKiller) {
+        ui.targetMeta.textContent = "Killer aktiv - Gegner treffen.";
+      } else {
+        ui.targetMeta.textContent = `Noch kein Killer · Leben ${lives}/${KILLER_START_LIVES}`;
+      }
+    }
+    if (ui.progressTitle) {
+      ui.progressTitle.textContent = "Leben";
+    }
+    if (ui.progressLabel) {
+      ui.progressLabel.textContent = `${lives} / ${KILLER_START_LIVES}`;
+    }
+    if (ui.targetGrid) {
+      ui.targetGrid.hidden = false;
+      renderKillerTargetGrid(player, ui.targetGrid, variant);
+    }
+  } else if (context.is121Mode) {
     if (ui.targetLabel) {
       ui.targetLabel.textContent = String(player.currentTarget || TRAINING_121_BASE_TARGET);
     }
@@ -5979,11 +6287,14 @@ function renderTrainingPlayerView(player, context) {
       : player.lastDurationMs || 0;
     ui.durationLabel.textContent = formatTrainingDuration(duration);
   }
+  const canAct = gameState.training.active &&
+    !player.completed &&
+    (!context.isKillerMode || Number.isFinite(player.killerTarget));
   if (ui.hitButton) {
-    ui.hitButton.disabled = !gameState.training.active || player.completed;
+    ui.hitButton.disabled = !canAct;
   }
   if (ui.missButton) {
-    ui.missButton.disabled = !gameState.training.active || player.completed;
+    ui.missButton.disabled = !canAct;
   }
 
   renderTrainingHistoryForPlayer(player, context.config.id, ui.historyList);
@@ -6002,6 +6313,39 @@ function renderTrainingTargetGrid(targets, currentIndex, container) {
       node.classList.add("active");
     }
     node.textContent = describeTrainingTarget(target, "short");
+    fragment.appendChild(node);
+  });
+  container.appendChild(fragment);
+}
+
+function renderKillerTargetGrid(player, container, variant) {
+  if (!container || !player) return;
+  container.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  const assigned = new Map();
+  gameState.training.players.forEach((entry) => {
+    if (Number.isFinite(entry.killerTarget)) {
+      assigned.set(entry.killerTarget, entry.slot);
+    }
+  });
+  const variantId = variant?.id;
+  const selectable = !gameState.training.active;
+  KILLER_TARGETS.forEach((target) => {
+    const node = document.createElement("span");
+    node.className = "training-target killer-target";
+    node.textContent = describeKillerTarget(target, variantId, "short");
+    node.dataset.killerTarget = String(target);
+    if (player.killerTarget === target) {
+      node.classList.add("killer-selected");
+    } else if (assigned.has(target)) {
+      node.classList.add("killer-taken");
+    }
+    if (selectable) {
+      node.classList.add("killer-selectable");
+      node.addEventListener("click", () => setKillerTargetForPlayer(player, target));
+    } else {
+      node.classList.add("killer-locked");
+    }
     fragment.appendChild(node);
   });
   container.appendChild(fragment);
@@ -6032,6 +6376,15 @@ function renderTrainingHistoryForPlayer(player, mode, listElement) {
       const successes = entry.meta?.successes ?? 0;
       const attempts = entry.meta?.attempts ?? entry.targets ?? 0;
       targetMeta.textContent = `Checkouts ${successes} / ${attempts}`;
+    } else if (entry.mode === TRAINING_MODES.killer.id) {
+      const targetLabel = entry.meta?.targetLabel || (entry.meta?.target != null ? entry.meta.target : "?");
+      const variantLabel = entry.meta?.variant ? ` · ${entry.meta.variant}` : "";
+      const result = entry.meta?.winner
+        ? "Gewonnen"
+        : entry.meta?.aborted
+          ? "Abgebrochen"
+          : "Ausgeschieden";
+      targetMeta.textContent = `Ziel ${targetLabel}${variantLabel} · ${result}`;
     } else if (entry.mode === TRAINING_MODES.bobs27.id) {
       const score = Number.isFinite(entry.meta?.score) ? entry.meta.score : 0;
       const busted = entry.meta?.busted;
@@ -6063,6 +6416,15 @@ function renderTrainingHistoryForPlayer(player, mode, listElement) {
       const attempts = entry.meta?.attempts ?? 0;
       metaParts.push(`${successes} Checkouts`);
       metaParts.push(`${attempts} Versuche`);
+    }
+    if (entry.mode === TRAINING_MODES.killer.id) {
+      const eliminations = entry.meta?.eliminations ?? 0;
+      const lives = entry.meta?.lives ?? 0;
+      if (entry.meta?.killer) {
+        metaParts.push("Killer");
+      }
+      metaParts.push(`Eliminierungen ${eliminations}`);
+      metaParts.push(`Leben ${lives}`);
     }
     metaParts.push(`${entry.darts} Darts`);
     metaParts.push(durationLabel);

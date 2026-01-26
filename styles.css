@@ -2055,6 +2055,38 @@ button.ghost.danger:hover {
   color: var(--primary);
 }
 
+.training-target.killer-selectable {
+  cursor: pointer;
+}
+
+.training-target.killer-selectable:hover {
+  border-color: rgba(36, 85, 245, 0.4);
+  color: var(--text);
+}
+
+.training-target.killer-selected {
+  background: rgba(245, 202, 52, 0.22);
+  border-color: rgba(245, 202, 52, 0.6);
+  color: #9b6b00;
+}
+
+.training-target.killer-taken {
+  border-style: dashed;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.training-target.killer-locked {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+body.theme-dark .training-target.killer-selected {
+  background: rgba(250, 204, 21, 0.18);
+  border-color: rgba(250, 204, 21, 0.55);
+  color: var(--accent);
+}
+
 .training-stat {
   display: flex;
   flex-direction: column;
