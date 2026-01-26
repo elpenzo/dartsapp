@@ -1,58 +1,35 @@
 # Agent-Plan: Sprachgesteuerte 501-Dartsapp (HTML/JavaScript)
 
 ## Vision & Ziele
-- Echtzeit-Mitschnitt eines 501-Leg per Spracheingabe im Browser.
-- Minimale Interaktion mit Maus/Tastatur, Fokus auf Sprachbefehle.
-- Klarer Spielfluss: Ansage ΓåÆ Validierung ΓåÆ Aktualisierung des Scoreboards.
-- Offline-first, aber modular erweiterbar (z.ΓÇ»B. Spielhistorie, Multiplayer).
+- Echtzeit-Mitschnitt eines 501-Leg im Browser.
+- Minimale Interaktion mit Maus/Tastatur, Fokus auf Spiel.
 
 ## Zielgruppe & Nutzungsszenarien
-- Casual- und Vereinsspieler:innen, die w├ñhrend einer Partie die H├ñnde frei haben wollen.
-- Tablets/Notebooks am Dartboard, ggf. mit zus├ñtzlichem Mikrofon und Toucheingabe.
-- Eins├ñtze bei Trainings, Ligaspielen oder Events zur schnellen Dokumentation.
+- Casual- und Vereinsspieler:innen, die während einer Partie das Scoring eingeben wollen.
+- Tablets/Notebooks am Dartboard, ggf. mit Toucheingabe.
+- Einsätze bei Trainings, Ligaspielen oder Events zur schnellen Dokumentation.
 
 ## Projektumfang (MVP)
 1. Startbildschirm mit Spielkonfiguration (Leg/Lives, Spieleranzahl).
-2. Scoreboard-Ansicht f├╝r bis zu zwei Spieler:innen (MVP).
-3. Sprachaufnahme ├╝ber Web Speech API (Chromium-Browser).
-4. Erkennung von Scores (0ΓÇô180) und speziellen Begriffen (ΓÇ₧BustΓÇ£, ΓÇ₧Double OutΓÇ£).
-5. Regel-Engine f├╝r 501 Double-Out (inkl. Bust-Logik).
-6. Verlauf mit letztem Check-out sowie Fehlerfeedback (Missverst├ñndnis, ung├╝ltige Eingabe).
+2. Scoreboard-Ansicht für bis zu vier Spieler:innen (MVP).
+3. Regel-Engine f├ür 501 Double-Out (inkl. Bust-Logik).
+4. Verlauf mit letztem Check-out sowie Fehlerfeedback
 
 ## Architektur├╝berblick
 - **Frontend**: Single-Page-App, HTML + Vanilla JS, modulare Komponentenstruktur.
 - **State Management**: Event-getrieben, zentrales `GameState`-Objekt (aktuelle Scores, Runden, Verlauf).
-- **Sprachsteuerung**: Wrapper um die Web Speech API; Fallback auf manuellen Input.
 - **UI-Komponenten**:
   - `MatchSetup`: Konfiguration, Start.
-  - `Scoreboard`: Anzeigen aktueller Scores, Rechner f├╝r Restpunkte.
-  - `VoiceConsole`: Status (lauscht, versteht, Fehler).
+  - `Scoreboard`: Anzeigen aktueller Scores, Rechner für Restpunkte.
   - `TurnHistory`: Chronologischer Log der Aufnahmen.
-- **Persistenz (optional sp├ñter)**: LocalStorage f├╝r Spielst├ñnde und Statistiken.
+- **Persistenz (optional sp├ñter)**: Azure Table Storage für Spielstände und Statistiken.
 
 ## Technische Bausteine
 - HTML5-Struktur mit semantischen Bereichen (`<header>`, `<main>`, `<section>`).
 - CSS Grid/Flexbox f├╝r responsive Darstellung (mobile ΓåÆ tablet).
-- Web Speech API (`SpeechRecognition`); f├╝r Browser ohne Support: Hinweis + manueller Input.
-- Testbare Units: Score-Berechnung, Bust-Logik, Parsing der Sprachbefehle.
+- Testbare Units: Score-Berechnung, Bust-Logik.
 - Build/Tooling: lightweight (npm + Vite optional), Fokus auf schnelles Iterieren.
 
-## Sprachbefehl-Design
-- Eingabeformat: ΓÇ₧Ein Triple zwanzigΓÇ£, ΓÇ₧140ΓÇ£, ΓÇ₧Single f├╝nfΓÇ£, ΓÇ₧BustΓÇ£.
-- Normalisierung: Map der gesprochenen Zahlen/W├╢rter auf int-Werte.
-- Fehlertoleranz: Konfidenzschwelle; bei Unklarheit Nachfrage (ΓÇ₧Bitte wiederholenΓÇ£).
-- Steuerbefehle: ΓÇ₧Neues SpielΓÇ£, ΓÇ₧R├╝ckg├ñngigΓÇ£, ΓÇ₧StoppΓÇ£, ΓÇ₧WeiterΓÇ£.
-
-## Workflow einer Runde
-1. **Start Turn**: Aktiver Spieler wird hervorgehoben, Timer optional.
-2. **Voice Capture**: Aufnahme starten ΓåÆ Resultat parsen ΓåÆ validieren.
-3. **Validation**:
-   - Score Γëñ verbleibende Punkte.
-   - Double-Out: Letzter Dart muss Doppel sein (Audio-Intent ΓÇ₧DoubleΓÇ£).
-   - Bust: Automatisch erkannt und Runde beendet.
-4. **State Update**: Score abziehen, Rest anzeigen, Check-out-Optionen.
-5. **Feedback**: Visuelle + akustische Best├ñtigung (Text-to-Speech optional).
-6. **Turn Switch**: N├ñchster Spieler; History aktualisieren.
 
 ## UI-Wireframe (konzeptionell)
 - **Header**: Spielstatus, aktive:r Spieler:in, Restdarts.
@@ -103,28 +80,22 @@ function applyDart(gameState, dartResult) {
 ```
 
 ## Risiken & Annahmen
-- Web Speech API funktioniert nur in modernen Chromium-Browsern ΓåÆ Browserpr├╝fung.
-- St├╢rger├ñusche beim Dartspiel erschweren Sprachverst├ñndnis ΓåÆ Option f├╝r Push-to-Talk / Headset.
-- Mehrspieler >2 erst in sp├ñteren Iterationen, Fokus MVP auf 1v1.
-- Datenschutz: Keine externe ├£bertragung (rein lokal).
+
 
 ## Milestones
 1. **Prototyp UI**: Statisches Scoreboard + manuelle Eingabe (1 Tag).
 2. **Game Engine**: Scorelogik, Bust, Rundenwechsel (1ΓÇô2 Tage).
-3. **Sprachintegration**: Befehle erkennen, Feedback anzeigen (2 Tage).
 4. **UX Feinschliff**: Fehlerbehandlung, responsive Layout, Audiofeedback (1 Tag).
 5. **Testing & Doku**: Unit Tests f├╝r Logik, Kurzanleitung (1 Tag).
 
 ## Erweiterungen (nach MVP)
 - Statistik-Dashboard (Average, Checkout-Quote).
-- Mehrsprachige Sprachbefehle.
 - Export (CSV/JSON), Teilen von Legs/Matches.
 - Integration mit Darts-Hardware (automatische Treffer).
-- Online-Multiplayer mit WebRTC + Voice Rooms.
+- Online-Multiplayer.
 
-## N├ñchste Schritte
+## Nächste Schritte
 - Turniermodus
-- Sprachsteuerung starten per Codewort (Spielername 1,20,Triple 1)
 - Soundeffekte 180
 - Match- & Turnierverwaltung
 
@@ -140,62 +111,3 @@ Spielplan automatisch erstellen
 - Trainingskarte unterstützt nun zwei Modi: Around the Clock (mit Varianten) und das 121 Game (Checkout-Challenge mit 9 Darts, automatischer Bestwert- und Verlaufs-Tracking).
 - UI angepasst (Modus-Auswahl, Statusanzeigen, Verlauf) sowie Logik in `app.js` erweitert, damit Treffer/Fehlwurf-Buttons zwischen Zahlenlauf und 121-Session unterscheiden.
 
-## KAmera Modus
-1. Grundidee: Was du technisch brauchst
-
-OpenCV  der Ablauf ist immer ungefähr:
-
-Videostream holen (Kamera)
-
-Board kalibrieren → Wo liegt das Board im Bild? Wie ist es verzerrt?
-
-Darts erkennen → wo sind neue Pfeile im Bild?
-
-(x, y) → Score umrechnen (Sektor + Ring berechnen)
-
-Score in deinem bestehenden App-Logik verarbeiten (501, Legs, Sets, Statistiken etc.)
-
-2. OpenCV-Logik (ohne oder mit wenig ML)
-
-Das ist der „klassische“ Weg, den du in fast jeder Sprache hinbekommst.
-
-Was du damit machen kannst
-
-Board erkennen:
-
-Kreis / Ringe mit HoughCircles
-
-Außenkontur & Ringe per Kantenerkennung (Canny) + HoughLines
-
-Dann Homography / Perspektivkorrektur (Board in eine Draufsicht „entzerren“)
-
-Darts erkennen:
-
-Frame vor dem Wurf, Frame nach dem Wurf → Differenzbild (Background Subtraction)
-
-Neue helle/dunkle längliche Objekte (Shaft/Flight) finden (Contour Detection)
-
-Schwerpunkt / Spitze approximieren
-
-Score berechnen:
-
-Du normierst in ein Koordinatensystem: Mittelpunkt (0,0)
-
-Radius = Double, Triple, Single, Bull, Bullseye (vordefinierte Schwellen in Pixeln, per Kalibrierung)
-
-Winkel → welcher 20er-Sektor (0–360° in 20 Zonen à 18°)
-
-Beispiel-Stack je nach App
-
-Web-App (JS/TS):
-
-getUserMedia() → Videostream
-
-opencv.js
- (OpenCV als WebAssembly im Browser)
-
-Deine vorhandene Dart-Logik in JS/TS, nur um CV ergänzt
-
-Desktop / Backend:
-
-Node.js mit opencv4nodejs
