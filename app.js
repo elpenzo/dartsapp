@@ -4408,15 +4408,6 @@ function finalizeGameStats() {
     renderProfileList();
   }
 
-  gameState.players.forEach((player) => {
-    player.totalPointsThisGame = 0;
-    player.totalDartsThisGame = 0;
-    player.totalLegsWon = 0;
-    player.legsThisSet = 0;
-    player.setsWon = 0;
-    player.dartHitsThisGame = createEmptyHistogram();
-  });
-
   gameState.statsCommitted = true;
   saveProfiles();
 }
@@ -9416,4 +9407,3 @@ function formatProfileDate(value) {
     return "";
   }
 }
-
