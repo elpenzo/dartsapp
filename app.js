@@ -4356,6 +4356,11 @@ function finalizeGameStats() {
     return;
   }
 
+  const totalLegsPlayed = gameState.players.reduce(
+    (sum, entry) => sum + (Number(entry.totalLegsWon) || 0),
+    0
+  );
+
   let updated = false;
 
   gameState.players.forEach((player) => {
