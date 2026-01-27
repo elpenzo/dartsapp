@@ -2140,6 +2140,10 @@ function applyTurnResult(result) {
   const scoreBefore = player.score;
   const remaining = scoreBefore - result.score;
   const requiresDouble = requiresDoubleCheckout();
+  const manualDarts = Math.max(
+    1,
+    Math.min(MAX_DARTS_PER_TURN, Number(result.dartsCount) || MAX_DARTS_PER_TURN)
+  );
 
   if (remaining < 0 || (requiresDouble && remaining === 1)) {
     const reason =
@@ -2149,12 +2153,15 @@ function applyTurnResult(result) {
   }
 
   if (remaining === 0 && requiresDouble) {
-    notifyVoiceStatus("error", `${outModeLabel()} benötigt ein Double zum Checkout`);
-    return;
+    const combos = findCheckoutCombos(scoreBefore, true, manualDarts);
+    if (!combos.length) {
+      registerBust(`${result.label} - Double benötigt`);
+      notifyVoiceStatus("error", `${outModeLabel()} benötigt ein Double zum Checkout`);
+      return;
+    }
   }
 
   recordSnapshot();
-  const manualDarts = Number(result.dartsCount) || 3;
   recordDartStats(player, result.score, manualDarts);
   recordCheckoutStats(player, scoreBefore, remaining === 0, manualDarts);
 
