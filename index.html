@@ -170,8 +170,8 @@
     <section class="card tournament-card" aria-labelledby="tournament-title">
       <h2 id="tournament-title">Turniermodus</h2>
       <p class="tournament-intro">
-        Richte ein K.-o.-Turnier oder eine Liga mit Hin- und Rueckrunde (bis zu 16 Spieler) aus. Die Tabelle bestimmt
-        die Finalisten.
+        Richte ein K.-o.-Turnier oder eine Liga (Jeder gegen jeden, einfach oder Hin- und Rueckrunde) aus. Die Tabelle
+        bestimmt die Finalisten.
       </p>
       <form id="tournament-form" class="tournament-form">
         <div class="tournament-grid">
@@ -325,7 +325,7 @@
             <label for="tournament-type">Turniermodus</label>
             <select id="tournament-type" name="tournamentType">
               <option value="ko" selected>K.-o.-Turnier</option>
-              <option value="league">Liga (Hin- und Rueckrunde)</option>
+              <option value="league">Liga (Jeder gegen jeden)</option>
             </select>
           </div>
           <div class="form-row">
@@ -333,6 +333,27 @@
             <select id="tournament-match-mode" name="tournamentMatchMode">
               <option value="single" selected>Einzel-Leg</option>
               <option value="bestOfThreeLegs">Saetze (Best of 3 Legs, 2 Saetze zum Sieg)</option>
+            </select>
+          </div>
+          <div class="form-row league-only">
+            <label for="league-starting-score">Startscore</label>
+            <select id="league-starting-score" name="leagueStartingScore">
+              <option value="501" selected>501</option>
+              <option value="301">301</option>
+            </select>
+          </div>
+          <div class="form-row league-only">
+            <label for="league-out-mode">Checkout-Regel</label>
+            <select id="league-out-mode" name="leagueOutMode">
+              <option value="single" selected>Single Out</option>
+              <option value="double">Double Out</option>
+            </select>
+          </div>
+          <div class="form-row league-only">
+            <label for="league-round-mode">Spielplan</label>
+            <select id="league-round-mode" name="leagueRoundMode">
+              <option value="double" selected>Hin- und Rueckrunde</option>
+              <option value="single">Einfach (nur ein Spiel)</option>
             </select>
           </div>
           <div class="form-row league-only">
@@ -346,8 +367,8 @@
           </div>
         </div>
         <p class="league-hint league-only">
-          Jeder spielt jeden mit Hin- und Rueckspiel. Die Tabelle bestimmt die Finalisten.
-        </p>
+        Jeder spielt jeden (einfach oder mit Hin- und Rueckspiel). Die Tabelle bestimmt die Finalisten.
+      </p>
         <div class="form-actions tournament-actions">
           <button type="submit" class="primary">Turnier starten</button>
           <button type="button" id="tournament-reset" class="ghost">Formular leeren</button>

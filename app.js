@@ -285,11 +285,16 @@ const MATCH_MODES = {
 const DEFAULT_MATCH_MODE = "single";
 const TOURNAMENT_TYPES = {
   ko: { id: "ko", label: "K.-o.-Turnier" },
-  league: { id: "league", label: "Liga (Hin- und Rueckrunde)" },
+  league: { id: "league", label: "Liga (Jeder gegen jeden)" },
 };
 const DEFAULT_TOURNAMENT_TYPE = "ko";
 const LEAGUE_DEFAULT_FINALISTS = 4;
 const LEAGUE_POINTS_WIN = 2;
+const LEAGUE_ROUND_MODES = {
+  single: { id: "single", label: "Einfach" },
+  double: { id: "double", label: "Hin- und Rueckrunde" },
+};
+const DEFAULT_LEAGUE_ROUND_MODE = "double";
 const TOURNAMENT_STORAGE_KEY = "friendDartTournament";
 const MAX_TOURNAMENT_PLAYERS = 16;
 const TOURNAMENT_ROUNDS = [
@@ -378,6 +383,9 @@ const elements = {
   tournamentAbortBtn: document.getElementById("tournament-abort"),
   tournamentTypeSelect: document.getElementById("tournament-type"),
   tournamentMatchModeSelect: document.getElementById("tournament-match-mode"),
+  leagueStartingScoreSelect: document.getElementById("league-starting-score"),
+  leagueOutModeSelect: document.getElementById("league-out-mode"),
+  leagueRoundModeSelect: document.getElementById("league-round-mode"),
   leagueFinalistsSelect: document.getElementById("league-finalists"),
   tournamentPlayerSelects: Array.from(document.querySelectorAll(".tournament-player-select")),
   tournamentPlayerInputs: Array.from(document.querySelectorAll(".tournament-player-input")),
@@ -544,6 +552,7 @@ function createInitialLeagueState() {
     currentMatchIndex: null,
     currentMatchId: null,
     finalistsCount: LEAGUE_DEFAULT_FINALISTS,
+    roundMode: DEFAULT_LEAGUE_ROUND_MODE,
     completed: false,
   };
 }
@@ -7995,6 +8004,10 @@ function normalizeTournamentType(type) {
   return type === TOURNAMENT_TYPES.league.id ? TOURNAMENT_TYPES.league.id : DEFAULT_TOURNAMENT_TYPE;
 }
 
+function normalizeLeagueRoundMode(value) {
+  return value === LEAGUE_ROUND_MODES.single.id ? LEAGUE_ROUND_MODES.single.id : DEFAULT_LEAGUE_ROUND_MODE;
+}
+
 function normalizeLeagueFinalistsCount(value, playerCount) {
   const numeric = Number(value);
   const fallback = LEAGUE_DEFAULT_FINALISTS;
@@ -8022,6 +8035,23 @@ function updateTournamentModeUI() {
       : Number(elements.leagueFinalistsSelect.value) || LEAGUE_DEFAULT_FINALISTS;
     const normalized = normalizeLeagueFinalistsCount(value, tournament?.players?.length || null);
     elements.leagueFinalistsSelect.value = String(normalized);
+  }
+  if (elements.leagueStartingScoreSelect) {
+    const value = tournament?.active
+      ? Number(tournament.startingScore)
+      : parseInt(elements.leagueStartingScoreSelect.value, 10);
+    const normalized = value === 301 ? 301 : DEFAULT_STARTING_SCORE;
+    elements.leagueStartingScoreSelect.value = String(normalized);
+  }
+  if (elements.leagueOutModeSelect) {
+    const value = tournament?.active ? tournament.outMode : elements.leagueOutModeSelect.value;
+    elements.leagueOutModeSelect.value = OUT_MODE_LABELS[value] ? value : DEFAULT_OUT_MODE;
+  }
+  if (elements.leagueRoundModeSelect) {
+    const value = tournament?.active
+      ? tournament.league?.roundMode
+      : elements.leagueRoundModeSelect.value;
+    elements.leagueRoundModeSelect.value = normalizeLeagueRoundMode(value);
   }
 
   if (elements.tournamentCard) {
@@ -8057,6 +8087,7 @@ function normalizeTournamentState(raw) {
     merged.league.finalistsCount,
     merged.players.length
   );
+  merged.league.roundMode = normalizeLeagueRoundMode(merged.league.roundMode);
 
   if (merged.status === "in-progress") {
     merged.status = "pending";
@@ -8190,6 +8221,15 @@ function resetTournamentForm() {
   if (elements.leagueFinalistsSelect) {
     elements.leagueFinalistsSelect.value = String(LEAGUE_DEFAULT_FINALISTS);
   }
+  if (elements.leagueStartingScoreSelect) {
+    elements.leagueStartingScoreSelect.value = String(DEFAULT_STARTING_SCORE);
+  }
+  if (elements.leagueOutModeSelect) {
+    elements.leagueOutModeSelect.value = DEFAULT_OUT_MODE;
+  }
+  if (elements.leagueRoundModeSelect) {
+    elements.leagueRoundModeSelect.value = DEFAULT_LEAGUE_ROUND_MODE;
+  }
   gameState.tournament = createInitialTournamentState();
   gameState.activeTournamentMatchId = null;
   saveTournamentState();
@@ -8253,28 +8293,35 @@ function onTournamentSubmit(event) {
 
   const matchModeValue = elements.tournamentMatchModeSelect?.value;
   const matchMode = MATCH_MODES[matchModeValue] ? matchModeValue : DEFAULT_MATCH_MODE;
-  const startingScore =
+  const tournamentStartingScore =
     parseInt(elements.startingScoreSelect?.value, 10) || DEFAULT_STARTING_SCORE;
+  const leagueStartingScore =
+    parseInt(elements.leagueStartingScoreSelect?.value, 10) || DEFAULT_STARTING_SCORE;
   const outModeRaw = elements.outModeSelect?.value;
   const outMode = OUT_MODE_LABELS[outModeRaw] ? outModeRaw : DEFAULT_OUT_MODE;
+  const leagueOutModeRaw = elements.leagueOutModeSelect?.value;
+  const leagueOutMode = OUT_MODE_LABELS[leagueOutModeRaw] ? leagueOutModeRaw : DEFAULT_OUT_MODE;
   const tournamentType = normalizeTournamentType(elements.tournamentTypeSelect?.value);
 
   const tournament = createInitialTournamentState();
   tournament.active = true;
   tournament.players = players;
   tournament.matchMode = matchMode;
-  tournament.startingScore = startingScore;
-  tournament.outMode = outMode;
+  tournament.startingScore =
+    tournamentType === TOURNAMENT_TYPES.league.id ? leagueStartingScore : tournamentStartingScore;
+  tournament.outMode =
+    tournamentType === TOURNAMENT_TYPES.league.id ? leagueOutMode : outMode;
   tournament.type = tournamentType;
   tournament.phase = tournamentType === TOURNAMENT_TYPES.league.id ? "league" : "ko";
 
   if (tournamentType === TOURNAMENT_TYPES.league.id) {
     const league = createInitialLeagueState();
+    league.roundMode = normalizeLeagueRoundMode(elements.leagueRoundModeSelect?.value);
     league.finalistsCount = normalizeLeagueFinalistsCount(
       elements.leagueFinalistsSelect?.value,
       players.length
     );
-    const structure = buildLeagueStructure(players);
+    const structure = buildLeagueStructure(players, { roundMode: league.roundMode });
     league.rounds = structure.rounds;
     league.matchLookup = structure.matchLookup;
     tournament.league = league;
@@ -8314,11 +8361,14 @@ function onTournamentSubmit(event) {
   setViewMode("tournament");
 }
 
-function buildLeagueStructure(players) {
+function buildLeagueStructure(players, options = {}) {
   const sanitized = Array.isArray(players) ? players.slice() : [];
   if (sanitized.length < 2) {
     return { rounds: [], matchLookup: {} };
   }
+
+  const roundMode = normalizeLeagueRoundMode(options.roundMode);
+  const includeReturnRounds = roundMode === LEAGUE_ROUND_MODES.double.id;
 
   const participantIds = sanitized.map((player) => player.id);
   if (participantIds.length % 2 === 1) {
@@ -8362,25 +8412,29 @@ function buildLeagueStructure(players) {
     ];
   }
 
-  const returnRounds = baseRounds.map((round, index) => {
-    const matchDay = roundsCount + index + 1;
-    const matches = round.matches.map((match, matchIndex) => ({
-      id: `lg-${matchDay}-${matchIndex + 1}`,
-      homeId: match.awayId,
-      awayId: match.homeId,
-      status: "pending",
-      winnerId: null,
-      legsHome: 0,
-      legsAway: 0,
-    }));
-    return {
-      id: `md${matchDay}`,
-      label: `Spieltag ${matchDay}`,
-      matches,
-    };
-  });
+  const rounds = includeReturnRounds
+    ? [
+      ...baseRounds,
+      ...baseRounds.map((round, index) => {
+        const matchDay = roundsCount + index + 1;
+        const matches = round.matches.map((match, matchIndex) => ({
+          id: `lg-${matchDay}-${matchIndex + 1}`,
+          homeId: match.awayId,
+          awayId: match.homeId,
+          status: "pending",
+          winnerId: null,
+          legsHome: 0,
+          legsAway: 0,
+        }));
+        return {
+          id: `md${matchDay}`,
+          label: `Spieltag ${matchDay}`,
+          matches,
+        };
+      }),
+    ]
+    : baseRounds;
 
-  const rounds = [...baseRounds, ...returnRounds];
   const matchLookup = {};
   rounds.forEach((round, roundIndex) => {
     round.matches.forEach((match, matchIndex) => {
@@ -9201,7 +9255,9 @@ function ensureLeagueSchedule(tournament) {
   if (!tournament?.league) return;
   if (tournament.league.rounds?.length) return;
   if ((tournament.players?.length || 0) < 2) return;
-  const structure = buildLeagueStructure(tournament.players);
+  const structure = buildLeagueStructure(tournament.players, {
+    roundMode: tournament.league?.roundMode,
+  });
   tournament.league.rounds = structure.rounds;
   tournament.league.matchLookup = structure.matchLookup;
 }
