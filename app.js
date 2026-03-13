@@ -417,7 +417,10 @@ const elements = {
   dartsAudio: document.getElementById("darts-audio"),
   profileDataStatus: document.getElementById("profile-data-status"),
   leaderboardCard: document.querySelector(".leaderboard-card"),
+  leaderboardRangeButtons: Array.from(document.querySelectorAll(".leaderboard-range-btn")),
   leaderboardSortButtons: Array.from(document.querySelectorAll(".leaderboard-sort-btn")),
+  leaderboardSummary: document.getElementById("leaderboard-summary"),
+  leaderboardRangeLabel: document.getElementById("leaderboard-range-label"),
   leaderboardBody: document.getElementById("leaderboard-body"),
   leaderboardEmpty: document.getElementById("leaderboard-empty"),
   cameraCard: document.querySelector(".camera-card"),
@@ -715,6 +718,7 @@ const gameState = {
   theme: "light",
   themePreference: null,
   statsCommitted: false,
+  leaderboardRange: "all",
   leaderboardSort: "average",
   matchMode: DEFAULT_MATCH_MODE,
   matchConfig: { ...MATCH_MODES[DEFAULT_MATCH_MODE] },
@@ -1088,6 +1092,188 @@ function cloneHistogram(source) {
   return clone;
 }
 
+const PROFILE_MATCH_HISTORY_LIMIT = 250;
+const LEADERBOARD_RANGE_CONFIG = {
+  all: { label: "Gesamt", shortLabel: "All Time", durationMs: null },
+  day: { label: "Heute", shortLabel: "24h", durationMs: 24 * 60 * 60 * 1000 },
+  week: { label: "7 Tage", shortLabel: "7 Tage", durationMs: 7 * 24 * 60 * 60 * 1000 },
+  month: { label: "30 Tage", shortLabel: "30 Tage", durationMs: 30 * 24 * 60 * 60 * 1000 },
+};
+
+function getStatsRangeConfig(rangeKey) {
+  return LEADERBOARD_RANGE_CONFIG[rangeKey] || LEADERBOARD_RANGE_CONFIG.all;
+}
+
+function getStatsRangeStart(rangeKey) {
+  const config = getStatsRangeConfig(rangeKey);
+  return config.durationMs ? Date.now() - config.durationMs : null;
+}
+
+function normalizeBestSetRecord(best) {
+  if (!best || typeof best !== "object") {
+    return { total: 0, darts: [], dartsUsed: 0, date: null };
+  }
+  const darts = Array.isArray(best.darts)
+    ? best.darts.map((label) => (label != null ? String(label) : "")).filter(Boolean)
+    : [];
+  let dartsUsed = Number(best.dartsUsed);
+  if (!Number.isFinite(dartsUsed) || dartsUsed < darts.length) {
+    dartsUsed = darts.length;
+  }
+  return {
+    total: Number(best.total) || 0,
+    darts,
+    dartsUsed,
+    date: typeof best.date === "string" ? best.date : best.date ? new Date(best.date).toISOString() : null,
+  };
+}
+
+function normalizeProfileHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const date = typeof entry.date === "string" ? entry.date : entry.date ? new Date(entry.date).toISOString() : null;
+  return {
+    id: typeof entry.id === "string" && entry.id ? entry.id : uid(),
+    date,
+    points: Number(entry.points) || 0,
+    darts: Number(entry.darts) || 0,
+    average: Number(entry.average) || 0,
+    legWon: Boolean(entry.legWon),
+    legsWon: Number(entry.legsWon) || 0,
+    legsPlayed: Number(entry.legsPlayed) || 0,
+    first12Points: Number(entry.first12Points) || 0,
+    first12Darts: Number(entry.first12Darts) || 0,
+    first12Average: Number(entry.first12Average) || 0,
+    checkoutAttempts: Number(entry.checkoutAttempts) || 0,
+    checkoutHits: Number(entry.checkoutHits) || 0,
+    tripleHits: Number(entry.tripleHits) || 0,
+    doubleHits: Number(entry.doubleHits) || 0,
+    dartHistogram: cloneHistogram(entry.dartHistogram),
+    bestTurn: normalizeBestSetRecord(entry.bestTurn),
+  };
+}
+
+function getFilteredHistoryEntries(history, rangeKey = "all") {
+  if (!Array.isArray(history) || !history.length) return [];
+  const rangeStart = getStatsRangeStart(rangeKey);
+  return history
+    .map((entry) => normalizeProfileHistoryEntry(entry))
+    .filter(Boolean)
+    .filter((entry) => {
+      if (!rangeStart) return true;
+      if (!entry.date) return false;
+      const timestamp = new Date(entry.date).getTime();
+      return Number.isFinite(timestamp) && timestamp >= rangeStart;
+    });
+}
+
+function createEmptyStatsSnapshot() {
+  return {
+    gamesPlayed: 0,
+    wins: 0,
+    legsWon: 0,
+    legsPlayed: 0,
+    totalPoints: 0,
+    totalDarts: 0,
+    first12Points: 0,
+    first12Darts: 0,
+    tripleHits: 0,
+    doubleHits: 0,
+    checkoutAttempts: 0,
+    checkoutHits: 0,
+    dartHistogram: createEmptyHistogram(),
+    bestThreeDartSet: { total: 0, darts: [], dartsUsed: 0, date: null },
+  };
+}
+
+function isCandidateBestSetBetter(candidate, current) {
+  const candidateTotal = Number(candidate?.total) || 0;
+  const currentTotal = Number(current?.total) || 0;
+  if (candidateTotal !== currentTotal) return candidateTotal > currentTotal;
+  const candidateDarts = Number(candidate?.dartsUsed) || (Array.isArray(candidate?.darts) ? candidate.darts.length : 0);
+  const currentDarts = Number(current?.dartsUsed) || (Array.isArray(current?.darts) ? current.darts.length : 0);
+  return candidateDarts > currentDarts;
+}
+
+function buildStatsSnapshotFromHistory(historyEntries) {
+  const snapshot = createEmptyStatsSnapshot();
+  historyEntries.forEach((entry) => {
+    const fallbackFirst12Darts = entry.first12Darts || (entry.first12Average ? 12 : 0);
+    const fallbackFirst12Points = entry.first12Points || (entry.first12Average ? entry.first12Average * fallbackFirst12Darts : 0);
+    snapshot.gamesPlayed += 1;
+    snapshot.wins += entry.legWon ? 1 : 0;
+    snapshot.legsWon += entry.legsWon || 0;
+    snapshot.legsPlayed += entry.legsPlayed || 0;
+    snapshot.totalPoints += entry.points || 0;
+    snapshot.totalDarts += entry.darts || 0;
+    snapshot.first12Points += fallbackFirst12Points;
+    snapshot.first12Darts += fallbackFirst12Darts;
+    snapshot.tripleHits += entry.tripleHits || 0;
+    snapshot.doubleHits += entry.doubleHits || 0;
+    snapshot.checkoutAttempts += entry.checkoutAttempts || 0;
+    snapshot.checkoutHits += entry.checkoutHits || 0;
+    Object.keys(entry.dartHistogram || {}).forEach((key) => {
+      snapshot.dartHistogram[key] = (snapshot.dartHistogram[key] || 0) + (entry.dartHistogram[key] || 0);
+    });
+    if (isCandidateBestSetBetter(entry.bestTurn, snapshot.bestThreeDartSet)) {
+      snapshot.bestThreeDartSet = normalizeBestSetRecord(entry.bestTurn);
+    }
+  });
+  return snapshot;
+}
+
+function getProfileStatsSnapshot(profile, rangeKey = "all") {
+  ensureProfileStats(profile);
+  const historyEntries = getFilteredHistoryEntries(profile.history, rangeKey);
+  let stats;
+  if (rangeKey === "all") {
+    stats = {
+      gamesPlayed: Number(profile.stats.gamesPlayed) || 0,
+      wins: historyEntries.reduce((sum, entry) => sum + (entry.legWon ? 1 : 0), 0),
+      legsWon: Number(profile.stats.legsWon) || 0,
+      legsPlayed: Number(profile.stats.legsPlayed) || 0,
+      totalPoints: Number(profile.stats.totalPoints) || 0,
+      totalDarts: Number(profile.stats.totalDarts) || 0,
+      first12Points: Number(profile.stats.first12Points) || 0,
+      first12Darts: Number(profile.stats.first12Darts) || 0,
+      tripleHits: Number(profile.stats.tripleHits) || 0,
+      doubleHits: Number(profile.stats.doubleHits) || 0,
+      checkoutAttempts: Number(profile.stats.checkoutAttempts) || 0,
+      checkoutHits: Number(profile.stats.checkoutHits) || 0,
+      dartHistogram: cloneHistogram(profile.stats.dartHistogram),
+      bestThreeDartSet: normalizeBestSetRecord(profile.stats.bestThreeDartSet),
+    };
+  } else {
+    stats = buildStatsSnapshotFromHistory(historyEntries);
+  }
+
+  const darts = Number(stats.totalDarts) || 0;
+  const points = Number(stats.totalPoints) || 0;
+  const first12Darts = Number(stats.first12Darts) || 0;
+  const first12Points = Number(stats.first12Points) || 0;
+  const legsWon = Number(stats.legsWon) || 0;
+  const legsPlayed = Number(stats.legsPlayed) || 0;
+  const gamesPlayed = Number(stats.gamesPlayed) || 0;
+  const checkoutAttempts = Number(stats.checkoutAttempts) || 0;
+  return {
+    rangeKey,
+    rangeLabel: getStatsRangeConfig(rangeKey).label,
+    stats,
+    historyEntries,
+    averages: {
+      perDart: darts > 0 ? points / darts : 0,
+      perThreeDarts: darts > 0 ? (points * 3) / darts : 0,
+      first12: first12Darts > 0 ? first12Points / first12Darts : 0,
+    },
+    rates: {
+      legs: legsPlayed > 0 ? legsWon / legsPlayed : 0,
+      checkout: checkoutAttempts > 0 ? Number(stats.checkoutHits || 0) / checkoutAttempts : 0,
+      triple: darts > 0 ? Number(stats.tripleHits || 0) / darts : 0,
+      double: darts > 0 ? Number(stats.doubleHits || 0) / darts : 0,
+      win: gamesPlayed > 0 ? Number(stats.wins || 0) / gamesPlayed : 0,
+    },
+  };
+}
+
 function histogramKeyForDart(dart) {
   if (!dart) return null;
   const multiplier = Number(dart.multiplier) || 1;
@@ -1412,6 +1598,11 @@ async function initialize() {
   if (elements.leaderboardSortButtons.length) {
     elements.leaderboardSortButtons.forEach((button) => {
       button.addEventListener("click", () => setLeaderboardSort(button.dataset.sort || "average"));
+    });
+  }
+  if (elements.leaderboardRangeButtons.length) {
+    elements.leaderboardRangeButtons.forEach((button) => {
+      button.addEventListener("click", () => setLeaderboardRange(button.dataset.range || "all"));
     });
   }
   forEachPlayerSlot(({ fallback, optional }, select, input) => {
@@ -4414,6 +4605,8 @@ function finalizeGameStats() {
       legWon: player.id === gameState.winnerId,
       legsWon: player.totalLegsWon || 0,
       legsPlayed: totalLegsPlayed,
+      first12Points: player.first12PointsThisGame || 0,
+      first12Darts: player.first12DartsThisGame || 0,
       first12Average:
         player.first12DartsThisGame > 0
           ? Number((player.first12PointsThisGame / player.first12DartsThisGame).toFixed(2))
@@ -4451,9 +4644,10 @@ function finalizeGameStats() {
 
     profile.history = profile.history || [];
     profile.history.unshift(entry);
-    if (profile.history.length > 10) {
-      profile.history.length = 10;
+    if (profile.history.length > PROFILE_MATCH_HISTORY_LIMIT) {
+      profile.history.length = PROFILE_MATCH_HISTORY_LIMIT;
     }
+    profile.updatedAt = Date.now();
 
     updated = true;
   });
@@ -7755,12 +7949,33 @@ function getPlayerDisplayName(player) {
 }
 
 function setLeaderboardSort(sortKey) {
-  const normalized = sortKey === "legs" ? "legs" : "average";
+  const normalized = ["average", "legs", "checkout"].includes(sortKey) ? sortKey : "average";
   if (gameState.leaderboardSort === normalized) return;
   gameState.leaderboardSort = normalized;
   updateLeaderboardSortButtons();
   renderLeaderboard();
   renderProfileOptions();
+}
+
+function setLeaderboardRange(rangeKey) {
+  const normalized = LEADERBOARD_RANGE_CONFIG[rangeKey] ? rangeKey : "all";
+  if (gameState.leaderboardRange === normalized) return;
+  gameState.leaderboardRange = normalized;
+  updateLeaderboardRangeButtons();
+  renderLeaderboard();
+  renderProfileOptions();
+}
+
+function updateLeaderboardRangeButtons() {
+  elements.leaderboardRangeButtons.forEach((button) => {
+    const key = button.dataset.range || "all";
+    const isActive = key === gameState.leaderboardRange;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+  if (elements.leaderboardRangeLabel) {
+    elements.leaderboardRangeLabel.textContent = getStatsRangeConfig(gameState.leaderboardRange).label;
+  }
 }
 
 function updateLeaderboardSortButtons() {
@@ -7775,8 +7990,8 @@ function updateLeaderboardSortButtons() {
 function buildLeaderboardEntries(sourceProfiles = profiles) {
   if (!Array.isArray(sourceProfiles)) return [];
   return sourceProfiles.map((profile) => {
-    ensureProfileStats(profile);
-    const stats = profile.stats || {};
+    const snapshot = getProfileStatsSnapshot(profile, gameState.leaderboardRange);
+    const stats = snapshot.stats;
     const darts = Number(stats.totalDarts) || 0;
     const points = Number(stats.totalPoints) || 0;
     const games = Number(stats.gamesPlayed) || 0;
@@ -7785,22 +8000,23 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
     const legsRateBase = legsPlayed > 0 ? legsPlayed : games;
     const legsWinRateValue = legsRateBase > 0 ? legs / legsRateBase : 0;
     const legsWinRateLabel = formatPercentage(legs, legsRateBase);
-    const averageValue = darts > 0 ? points / darts : 0;
-    const first12AverageValue =
-      Number(stats.first12Darts) > 0 ? Number(stats.first12Points) / Number(stats.first12Darts) : 0;
-    const checkoutRateValue =
-      Number(stats.checkoutAttempts) > 0 ? Number(stats.checkoutHits || 0) / Number(stats.checkoutAttempts) : 0;
-    const tripleRateValue = darts > 0 ? (Number(stats.tripleHits) || 0) / darts : 0;
-    const doubleRateValue = darts > 0 ? (Number(stats.doubleHits) || 0) / darts : 0;
+    const averageValue = snapshot.averages.perDart;
+    const first12AverageValue = snapshot.averages.first12;
+    const checkoutRateValue = snapshot.rates.checkout;
+    const tripleRateValue = snapshot.rates.triple;
+    const doubleRateValue = snapshot.rates.double;
+    const bestSet = normalizeBestSetRecord(stats.bestThreeDartSet);
+    const form = snapshot.historyEntries.slice(0, 5).map((entry) => (entry.legWon ? "W" : "L")).join("");
 
     return {
       profile,
+      snapshot,
       displayName: getProfileDisplayName(profile),
       fullName: `${profile.firstName || ""} ${profile.lastName || ""}`.trim(),
       averageValue,
-      threeDartAverageValue: averageValue * 3,
+      threeDartAverageValue: snapshot.averages.perThreeDarts,
       averageLabel: formatAverage(points, darts),
-      threeDartLabel: darts > 0 ? (averageValue * 3).toFixed(2) : "0.00",
+      threeDartLabel: darts > 0 ? snapshot.averages.perThreeDarts.toFixed(2) : "0.00",
       first12AverageValue,
       first12AverageLabel: formatAverage(stats.first12Points, stats.first12Darts),
       checkoutRateValue,
@@ -7814,7 +8030,11 @@ function buildLeaderboardEntries(sourceProfiles = profiles) {
       legsWinRateValue,
       legsWinRateLabel,
       games,
-      hasStats: games > 0 || darts > 0,
+      wins: Number(stats.wins) || 0,
+      bestSetLabel: bestSet.total ? `${bestSet.total} · ${bestSet.darts.join(" - ")}` : "–",
+      bestSetValue: bestSet.total || 0,
+      recentFormLabel: form || "–",
+      hasStats: games > 0 || darts > 0 || snapshot.historyEntries.length > 0,
     };
   });
 }
@@ -7826,6 +8046,10 @@ function compareLeaderboardEntries(a, b, sortKey = gameState.leaderboardSort) {
     }
     if (b.legs !== a.legs) return b.legs - a.legs;
     if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
+  } else if (sortKey === "checkout") {
+    if (b.checkoutRateValue !== a.checkoutRateValue) return b.checkoutRateValue - a.checkoutRateValue;
+    if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
+    if (b.legs !== a.legs) return b.legs - a.legs;
   } else {
     if (b.averageValue !== a.averageValue) return b.averageValue - a.averageValue;
     if (b.legs !== a.legs) return b.legs - a.legs;
@@ -7848,14 +8072,13 @@ function getLeaderboardOrderedProfiles() {
 const LEADERBOARD_COLUMN_LABELS = {
   rank: "Platz",
   player: "Spieler",
-  average: "O/Dart",
-  threeDart: "O 3-Dart",
-  first12: "O erste 12",
+  average: "Ø/Dart",
+  threeDart: "Ø 3-Dart",
+  first12: "Ø erste 12",
   checkout: "Checkout %",
-  triple: "Triple %",
-  double: "Double %",
-  legs: "Legs",
   legsPercent: "Legs %",
+  bestSet: "Bestes Set",
+  form: "Form",
   games: "Spiele",
 };
 
@@ -7871,6 +8094,7 @@ function setLeaderboardCellLabel(cell, key) {
 
 function renderLeaderboard() {
   if (!elements.leaderboardBody || !elements.leaderboardEmpty) return;
+  updateLeaderboardRangeButtons();
   updateLeaderboardSortButtons();
 
   const leaderboardEntries = buildLeaderboardEntries().filter((entry) => entry.hasStats);
@@ -7882,10 +8106,14 @@ function renderLeaderboard() {
 
   if (!leaderboardEntries.length) {
     elements.leaderboardEmpty.hidden = false;
+    if (elements.leaderboardSummary) {
+      elements.leaderboardSummary.innerHTML = "";
+    }
     return;
   }
 
   elements.leaderboardEmpty.hidden = true;
+  renderLeaderboardSummary(leaderboardEntries);
 
   const fragment = document.createDocumentFragment();
 
@@ -7943,11 +8171,6 @@ function renderLeaderboard() {
     playerCell.appendChild(playerWrapper);
     tr.appendChild(playerCell);
 
-    const averageCell = document.createElement("td");
-    averageCell.textContent = entry.averageLabel;
-    setLeaderboardCellLabel(averageCell, "average");
-    tr.appendChild(averageCell);
-
     const threeDartCell = document.createElement("td");
     threeDartCell.textContent = entry.threeDartLabel;
     setLeaderboardCellLabel(threeDartCell, "threeDart");
@@ -7963,20 +8186,10 @@ function renderLeaderboard() {
     setLeaderboardCellLabel(checkoutCell, "checkout");
     tr.appendChild(checkoutCell);
 
-    const tripleCell = document.createElement("td");
-    tripleCell.textContent = entry.tripleRateLabel;
-    setLeaderboardCellLabel(tripleCell, "triple");
-    tr.appendChild(tripleCell);
-
-    const doubleCell = document.createElement("td");
-    doubleCell.textContent = entry.doubleRateLabel;
-    setLeaderboardCellLabel(doubleCell, "double");
-    tr.appendChild(doubleCell);
-
-    const legsCell = document.createElement("td");
-    legsCell.textContent = String(entry.legs);
-    setLeaderboardCellLabel(legsCell, "legs");
-    tr.appendChild(legsCell);
+    const averageCell = document.createElement("td");
+    averageCell.textContent = entry.averageLabel;
+    setLeaderboardCellLabel(averageCell, "average");
+    tr.appendChild(averageCell);
 
     const legsPercentCell = document.createElement("td");
     legsPercentCell.textContent = entry.legsWinRateLabel;
@@ -7988,10 +8201,52 @@ function renderLeaderboard() {
     setLeaderboardCellLabel(gamesCell, "games");
     tr.appendChild(gamesCell);
 
+    const bestSetCell = document.createElement("td");
+    bestSetCell.textContent = entry.bestSetLabel;
+    setLeaderboardCellLabel(bestSetCell, "bestSet");
+    tr.appendChild(bestSetCell);
+
+    const formCell = document.createElement("td");
+    formCell.textContent = entry.recentFormLabel;
+    setLeaderboardCellLabel(formCell, "form");
+    tr.appendChild(formCell);
+
     fragment.appendChild(tr);
   });
 
   elements.leaderboardBody.appendChild(fragment);
+}
+
+function renderLeaderboardSummary(entries) {
+  if (!elements.leaderboardSummary) return;
+  const totalGames = entries.reduce((sum, entry) => sum + entry.games, 0);
+  const totalDarts = entries.reduce((sum, entry) => sum + entry.snapshot.stats.totalDarts, 0);
+  const leader = entries[0];
+  const bestCheckout = entries
+    .slice()
+    .sort((a, b) => b.checkoutRateValue - a.checkoutRateValue || b.games - a.games)[0];
+  elements.leaderboardSummary.innerHTML = `
+    <article class="leaderboard-summary-card">
+      <span class="leaderboard-summary-label">Aktive Profile</span>
+      <strong class="leaderboard-summary-value">${entries.length}</strong>
+      <span class="leaderboard-summary-meta">mit Daten in ${escapeHtml(getStatsRangeConfig(gameState.leaderboardRange).label)}</span>
+    </article>
+    <article class="leaderboard-summary-card">
+      <span class="leaderboard-summary-label">Spiele im Fenster</span>
+      <strong class="leaderboard-summary-value">${Number(totalGames || 0).toLocaleString("de-DE")}</strong>
+      <span class="leaderboard-summary-meta">${Number(totalDarts || 0).toLocaleString("de-DE")} Darts erfasst</span>
+    </article>
+    <article class="leaderboard-summary-card">
+      <span class="leaderboard-summary-label">Leader</span>
+      <strong class="leaderboard-summary-value">${escapeHtml(leader?.displayName || "–")}</strong>
+      <span class="leaderboard-summary-meta">3-Dart Ø ${escapeHtml(leader?.threeDartLabel || "0.00")}</span>
+    </article>
+    <article class="leaderboard-summary-card">
+      <span class="leaderboard-summary-label">Bester Checkout</span>
+      <strong class="leaderboard-summary-value">${escapeHtml(bestCheckout?.checkoutRateLabel || "0.0%")}</strong>
+      <span class="leaderboard-summary-meta">${escapeHtml(bestCheckout?.displayName || "–")}</span>
+    </article>
+  `;
 }
 
 function setTournamentStatus(message, state = "idle") {
@@ -9757,26 +10012,10 @@ function ensureProfileStats(profile) {
   profile.stats.checkoutHits = profile.stats.checkoutHits || 0;
   profile.stats.dartHistogram = cloneHistogram(profile.stats.dartHistogram);
 
-  const best = profile.stats.bestThreeDartSet;
-  if (!best || typeof best !== "object") {
-    profile.stats.bestThreeDartSet = { total: 0, darts: [], dartsUsed: 0, date: null };
-  } else {
-    const darts = Array.isArray(best.darts)
-      ? best.darts.map((label) => (label != null ? String(label) : "")).filter(Boolean)
-      : [];
-    let dartsUsed = Number(best.dartsUsed);
-    if (!Number.isFinite(dartsUsed) || dartsUsed < darts.length) {
-      dartsUsed = darts.length;
-    }
-    profile.stats.bestThreeDartSet = {
-      total: Number(best.total) || 0,
-      darts,
-      dartsUsed,
-      date: typeof best.date === "string" ? best.date : best.date ? new Date(best.date).toISOString() : null,
-    };
-  }
-
-  profile.history = profile.history || [];
+  profile.stats.bestThreeDartSet = normalizeBestSetRecord(profile.stats.bestThreeDartSet);
+  profile.history = Array.isArray(profile.history)
+    ? profile.history.map((entry) => normalizeProfileHistoryEntry(entry)).filter(Boolean)
+    : [];
 }
 
 function ensureProfileTrainingData(profile) {
