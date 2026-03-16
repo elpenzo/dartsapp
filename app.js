@@ -1450,6 +1450,10 @@ async function initialize() {
   elements.manualCommitBtn.addEventListener("click", () => {
     const value = parseInt(elements.manualScoreInput.value, 10);
     if (Number.isFinite(value)) {
+      if (!gameState.legActive) {
+        notifyVoiceStatus("error", "Kein aktives Leg");
+        return;
+      }
       applyTurnResult({ type: "turnScore", score: value, label: `${value}` });
       elements.manualScoreInput.value = "";
     }
@@ -2334,6 +2338,10 @@ function applyDart(interpretation) {
 }
 
 function applyTurnResult(result) {
+  if (!gameState.legActive) {
+    notifyVoiceStatus("error", "Kein aktives Leg");
+    return;
+  }
   const player = gameState.players[gameState.activeIndex];
   if (!player) return;
 
@@ -2435,6 +2443,10 @@ function pushHistory(turn, player, legWon = false) {
 }
 
 function registerBust(reason) {
+  if (!gameState.legActive) {
+    notifyVoiceStatus("error", "Kein aktives Leg");
+    return;
+  }
   const player = gameState.players[gameState.activeIndex];
   if (!player) return;
 
